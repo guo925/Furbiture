@@ -1,0 +1,8 @@
+.el-message {
+  top: 100px !important;
+  z-index: 9999 !important;
+}
+
+.el-message__content {
+  padding: 10px 20px;
+}

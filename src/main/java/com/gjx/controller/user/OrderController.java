@@ -1,0 +1,118 @@
+package com.gjx.controller.user;
+
+import com.gjx.common.R;
+import com.gjx.entity.Order;
+import com.gjx.service.IOrderService;
+import com.gjx.service.IOrderItemService;
+import com.gjx.util.AuthenticationUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * 订单控制器
+ */
+@RestController
+@RequestMapping("/api/orders")
+@Tag(name = "订单管理", description = "订单相关接口")
+public class OrderController {
+
+    @Autowired
+    private IOrderService orderService;
+
+    @Autowired
+    private IOrderItemService orderItemService;
+
+    /**
+     * 创建订单
+     * @param addressId 地址ID
+     * @param cartItemIds 购物车商品ID列表
+     * @param request HTTP请求
+     * @return 订单信息
+     */
+    @Operation(summary = "创建订单", description = "从购物车选中商品创建订单")
+    @PostMapping
+    public R<Order> createOrder(@RequestParam Long addressId,
+                         @RequestParam List<Long> cartItemIds,
+                         HttpServletRequest request) {
+        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        Order order = orderService.createOrder(userId, addressId, cartItemIds);
+        return R.ok(order);
+    }
+
+    /**
+     * 模拟支付
+     * @param orderNo 订单号
+     * @return 支付结果
+     */
+    @Operation(summary = "模拟支付", description = "模拟订单支付")
+    @PostMapping("/pay")
+    public R<?> pay(@RequestParam String orderNo) {
+        orderService.mockPay(orderNo);
+        return R.ok("支付成功");
+    }
+
+    /**
+     * 取消订单
+     * @param orderNo 订单号
+     * @return 取消结果
+     */
+    @Operation(summary = "取消订单", description = "取消未支付的订单")
+    @PostMapping("/cancel")
+    public R<?> cancel(@RequestParam String orderNo) {
+        orderService.cancelOrder(orderNo);
+        return R.ok("订单已取消");
+    }
+
+    /**
+     * 确认收货
+     * @param orderNo 订单号
+     * @return 确认结果
+     */
+    @Operation(summary = "确认收货", description = "确认收到商品")
+    @PostMapping("/receive")
+    public R<?> receive(@RequestParam String orderNo) {
+        orderService.confirmReceive(orderNo);
+        return R.ok("已确认收货");
+    }
+
+    /**
+     * 获取用户订单列表
+     * @param status 订单状态（可选）
+     * @param request HTTP请求
+     * @return 订单列表
+     */
+    @Operation(summary = "获取用户订单列表", description = "获取当前用户的订单列表，支持状态筛选")
+    @GetMapping
+    public R<List<Order>> list(@RequestParam(required = false) Integer status,
+                  HttpServletRequest request) {
+        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        List<Order> orders = orderService.listByUserId(userId, status);
+        return R.ok(orders);
+    }
+
+    /**
+     * 获取订单详情
+     * @param orderNo 订单号
+     * @param request HTTP请求
+     * @return 订单详情
+     */
+    @Operation(summary = "获取订单详情", description = "根据订单号获取订单详情")
+    @GetMapping("/{orderNo}")
+    public R<?> detail(@PathVariable String orderNo, HttpServletRequest request) {
+        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        Order order = orderService.getByOrderNo(orderNo, userId);
+        if (order == null) {
+            return R.error("订单不存在");
+        }
+        List<?> orderItems = orderItemService.listByOrderId(order.getId());
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("order", order);
+        result.put("items", orderItems);
+        return R.ok(result);
+    }
+}
