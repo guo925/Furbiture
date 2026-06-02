@@ -19,7 +19,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     public Page<User> adminListUsers(Integer page, Integer size, String username) {
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
         if (username != null && !username.isEmpty()) {
-            queryWrapper.like(User::getUsername, username);
+            queryWrapper.like(User::getUsername, username)
+                    .or()
+                    .like(User::getPhone, username);
         }
         queryWrapper.orderByDesc(User::getCreateTime);
         return page(new Page<>(page, size), queryWrapper);

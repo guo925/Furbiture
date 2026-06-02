@@ -11,7 +11,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 订单控制器
@@ -88,11 +90,27 @@ public class OrderController {
      */
     @Operation(summary = "获取用户订单列表", description = "获取当前用户的订单列表，支持状态筛选")
     @GetMapping
-    public R<List<Order>> list(@RequestParam(required = false) Integer status,
+    public R<List<Map<String, Object>>> list(@RequestParam(required = false) Integer status,
                   HttpServletRequest request) {
         Long userId = AuthenticationUtil.getUserIdFromRequest(request);
         List<Order> orders = orderService.listByUserId(userId, status);
-        return R.ok(orders);
+        List<Map<String, Object>> result = orders.stream().map(order -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", order.getId());
+            item.put("orderNo", order.getOrderNo());
+            item.put("userId", order.getUserId());
+            item.put("addressId", order.getAddressId());
+            item.put("totalAmount", order.getTotalAmount());
+            item.put("status", order.getStatus());
+            item.put("payTime", order.getPayTime());
+            item.put("deliveryTime", order.getDeliveryTime());
+            item.put("finishTime", order.getFinishTime());
+            item.put("cancelTime", order.getCancelTime());
+            item.put("createTime", order.getCreateTime());
+            item.put("orderItems", orderItemService.listByOrderId(order.getId()));
+            return item;
+        }).toList();
+        return R.ok(result);
     }
 
     /**

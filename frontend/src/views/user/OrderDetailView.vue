@@ -146,15 +146,8 @@ onMounted(async () => {
 const loadOrderDetail = async () => {
   try {
     loading.value = true
-    const orderId = route.params.id
-    
-    // 先获取所有订单，找到对应订单的 orderNumber
-    const ordersResponse = await orderAPI.getList()
-    const orderList = ordersResponse.data.data || []
-    const order = orderList.find(o => o.id == orderId)
-    
-    if (order) {
-      const response = await orderAPI.getDetail(order.orderNo)
+    const orderNo = route.params.id
+    const response = await orderAPI.getDetail(orderNo)
       const data = response.data.data
       
       // 转换订单数据格式
@@ -181,16 +174,13 @@ const loadOrderDetail = async () => {
         productImage: item.productImage || '',
         quantity: item.quantity,
         price: item.price,
-        totalPrice: item.totalPrice
+        totalPrice: item.totalPrice || Number(item.price || 0) * Number(item.quantity || 0)
       }))
       
       // 获取地址信息
       if (data.order.addressId) {
         await loadAddress(data.order.addressId)
       }
-    } else {
-      ElMessage.error('订单不存在')
-    }
   } catch (error) {
     console.error('获取订单详情失败:', error)
     ElMessage.error('获取订单详情失败')

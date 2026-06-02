@@ -1,4 +1,5 @@
 <template>
+  <MerchantLayout title="店铺资料" subtitle="维护店铺账号、联系方式和登录安全">
   <div class="merchant-profile">
     <div class="page-header">
       <h2>个人中心</h2>
@@ -44,12 +45,14 @@
       </div>
     </div>
   </div>
+  </MerchantLayout>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { merchantAPI } from '../../api'
 import { ElMessage } from 'element-plus'
+import MerchantLayout from '../../components/MerchantLayout.vue'
 
 const formRef = ref(null)
 const passwordFormRef = ref(null)
@@ -121,7 +124,7 @@ const loadUserInfo = async () => {
 const handleUpdate = async () => {
   try {
     await formRef.value.validate()
-    await merchantAPI.updateProfile(userInfo)
+    await merchantAPI.info.updateProfile(userInfo)
     ElMessage.success('信息更新成功')
   } catch (error) {
     if (error.errorFields) return
@@ -133,7 +136,7 @@ const handleChangePassword = async () => {
   try {
     await passwordFormRef.value.validate()
     
-    await merchantAPI.changePassword({
+    await merchantAPI.info.changePassword({
       oldPassword: passwordForm.oldPassword,
       newPassword: passwordForm.newPassword
     })
@@ -155,7 +158,7 @@ const handleChangePassword = async () => {
   background: #fff;
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  border: 1px solid #e5e7eb;
   min-height: 600px;
 }
 

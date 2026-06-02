@@ -8,6 +8,7 @@ import com.gjx.service.IUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,6 +22,9 @@ public class AdminAuthController {
     @Autowired
     private IUserService userService;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @Operation(summary = "管理员登录", description = "管理员登录并获取JWT令牌")
     @PostMapping("/login")
     public R<String> login(@RequestParam String username, @RequestParam String password) {
@@ -32,7 +36,7 @@ public class AdminAuthController {
             }
 
             // 验证密码
-            if (!password.equals(user.getPassword())) {
+            if (!passwordEncoder.matches(password, user.getPassword())) {
                 return R.error(ResultCode.UNAUTHORIZED, "密码错误");
             }
 

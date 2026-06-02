@@ -1,4 +1,5 @@
 <template>
+  <MerchantLayout title="分类管理" subtitle="维护店铺商品类目、图标和排序">
   <div class="merchant-categories">
     <div class="page-header">
       <h2>商品分类</h2>
@@ -123,6 +124,7 @@
       </template>
     </el-dialog>
   </div>
+  </MerchantLayout>
 </template>
 
 <script setup>
@@ -130,6 +132,7 @@ import { ref, onMounted, reactive } from 'vue'
 import { merchantAPI, fileAPI } from '../../api'
 import { Search, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import MerchantLayout from '../../components/MerchantLayout.vue'
 
 const categories = ref([])
 const total = ref(0)
@@ -334,7 +337,7 @@ const handleStatusChange = async (id, status) => {
   background: #fff;
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  border: 1px solid #e5e7eb;
 }
 
 .page-header {

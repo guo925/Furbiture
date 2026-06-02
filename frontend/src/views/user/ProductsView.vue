@@ -1,212 +1,211 @@
 <template>
-  <div class="products">
-    <!-- 导航栏 -->
-    <header class="navbar">
-      <div class="container">
-        <div class="logo">
-          <router-link to="/">家具商城</router-link>
-        </div>
-        <nav class="nav">
-          <router-link to="/home" class="nav-item">首页</router-link>
-          <router-link to="/products" class="nav-item active">商品列表</router-link>
-          <router-link to="/cart" class="nav-item">
-            购物车
-            <span v-if="cartStore.totalQuantity > 0" class="cart-badge">{{ cartStore.totalQuantity }}</span>
-          </router-link>
-        </nav>
-        <div class="user">
-          <template v-if="userStore.isAuthenticated">
-            <span class="welcome">欢迎, {{ userStore.user.username }}</span>
-            <router-link to="/profile" class="nav-item">个人中心</router-link>
-            <router-link to="/orders" class="nav-item">我的订单</router-link>
-            <button @click="logout" class="btn">退出</button>
-          </template>
-          <template v-else>
-            <router-link to="/login" class="btn">登录</router-link>
-            <router-link to="/register" class="btn btn-primary">注册</router-link>
-          </template>
-        </div>
-      </div>
-    </header>
+  <UserLayout>
+    <section class="shop-container products-page">
+      <div class="crumb">首页 / 全部商品</div>
 
-    <!-- 搜索和筛选 -->
-    <div class="filter-section">
-      <div class="container">
-        <div class="filter-bar">
-          <div class="search-box">
-            <el-input
-              v-model="searchQuery"
-              placeholder="搜索商品"
-              prefix-icon="Search"
-              style="width: 300px"
-            >
-              <template #append>
-                <el-button @click="search">搜索</el-button>
-              </template>
-            </el-input>
-          </div>
-          <div class="category-filter">
-            <el-select v-model="selectedCategory" placeholder="选择分类">
-              <el-option label="全部分类" value=""></el-option>
-              <el-option
-                v-for="category in categories"
-                :key="category.id"
-                :label="category.name"
-                :value="category.id"
-              ></el-option>
-            </el-select>
-          </div>
-          <div class="sort-filter">
-            <el-select v-model="sortBy" placeholder="排序方式">
-              <el-option label="默认排序" value=""></el-option>
-              <el-option label="价格从低到高" value="price_asc"></el-option>
-              <el-option label="价格从高到低" value="price_desc"></el-option>
-            </el-select>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 商品列表 -->
-    <div class="product-section">
-      <div class="container">
-        <div class="product-grid" v-if="!loading">
-          <div
-            v-for="product in products"
-            :key="product.id"
-            class="product-card"
-            @click="goToDetail(product.id)"
+      <div class="filter-board">
+        <div class="filter-row">
+          <span>分类</span>
+          <button :class="{ active: !selectedCategory }" type="button" @click="setCategory('')">全部</button>
+          <button
+            v-for="category in categories"
+            :key="category.id"
+            :class="{ active: String(selectedCategory) === String(category.id) }"
+            type="button"
+            @click="setCategory(category.id)"
           >
-            <div class="product-image">
-              <img :src="product.mainImage" :alt="product.name">
-            </div>
-            <div class="product-info">
-              <h3 class="product-name">{{ product.name }}</h3>
-              <p class="product-price">¥{{ product.price }}</p>
-              <div class="product-buttons">
-                <button @click.stop="addToCart(product.id)" class="btn btn-primary">加入购物车</button>
-              </div>
-            </div>
-          </div>
+            {{ category.name }}
+          </button>
         </div>
-        <div v-else class="loading">
-          <el-skeleton :rows="8" animated />
-        </div>
-
-        <!-- 分页 -->
-        <div class="pagination" v-if="!loading && total > 0">
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :page-sizes="[12, 24, 36]"
-            layout="total, sizes, prev, pager, next, jumper"
-            :total="total"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-          />
+        <div class="filter-row tools">
+          <span>排序</span>
+          <button v-for="item in sortOptions" :key="item.value" :class="{ active: sortBy === item.value }" type="button" @click="setSort(item.value)">
+            {{ item.label }}
+          </button>
+          <el-input-number v-model="minPrice" :min="0" :controls="false" placeholder="最低价" />
+          <span class="dash">-</span>
+          <el-input-number v-model="maxPrice" :min="0" :controls="false" placeholder="最高价" />
+          <el-button @click="applyPrice">确定</el-button>
         </div>
       </div>
-    </div>
 
-    <!-- 页脚 -->
-    <footer class="footer">
-      <div class="container">
-        <p>&copy; 2026 家具商城. 保留所有权利.</p>
+      <div class="list-head">
+        <div>
+          <h1>{{ pageTitle }}</h1>
+          <p>共 {{ total }} 件商品，支持关键词、分类、价格区间筛选。</p>
+        </div>
+        <el-select v-model="pageSize" @change="handleSizeChange">
+          <el-option :value="12" label="每页 12 件" />
+          <el-option :value="24" label="每页 24 件" />
+          <el-option :value="36" label="每页 36 件" />
+        </el-select>
       </div>
-    </footer>
-  </div>
+
+      <el-skeleton v-if="loading" :rows="10" animated />
+      <div v-else-if="filteredProducts.length" class="product-grid">
+        <ProductCard
+          v-for="product in filteredProducts"
+          :key="product.id"
+          :product="product"
+          @open="goToDetail"
+          @cart="addToCart"
+        />
+      </div>
+      <el-empty v-else description="没有找到匹配商品">
+        <el-button color="#ff5000" @click="resetFilters">清空筛选</el-button>
+      </el-empty>
+
+      <div v-if="!loading && total > 0" class="pagination">
+        <el-pagination
+          v-model:current-page="currentPage"
+          :page-size="pageSize"
+          layout="prev, pager, next, jumper"
+          :total="total"
+          @current-change="handleCurrentChange"
+        />
+      </div>
+    </section>
+  </UserLayout>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import UserLayout from '../../components/UserLayout.vue'
+import ProductCard from '../../components/ProductCard.vue'
+import { productAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
 import { useCartStore } from '../../stores/cart'
-import { productAPI } from '../../api'
-import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const cartStore = useCartStore()
 
-const searchQuery = ref('')
-const selectedCategory = ref('')
-const sortBy = ref('')
-const currentPage = ref(1)
+const searchQuery = ref(route.query.keyword || '')
+const selectedCategory = ref(route.query.categoryId || '')
+const sortBy = ref(route.query.sortBy || '')
+const currentPage = ref(Number(route.query.page || 1))
 const pageSize = ref(12)
 const products = ref([])
 const total = ref(0)
 const loading = ref(false)
 const categories = ref([])
+const minPrice = ref(route.query.minPrice ? Number(route.query.minPrice) : undefined)
+const maxPrice = ref(route.query.maxPrice ? Number(route.query.maxPrice) : undefined)
+
+const sortOptions = [
+  { label: '综合', value: '' },
+  { label: '销量优先', value: 'sales_desc' },
+  { label: '价格从低到高', value: 'price_asc' },
+  { label: '价格从高到低', value: 'price_desc' }
+]
+
+const pageTitle = computed(() => searchQuery.value ? `搜索“${searchQuery.value}”` : '全部商品')
+
+const filteredProducts = computed(() => {
+  return products.value.filter(product => {
+    const price = Number(product.price || 0)
+    if (minPrice.value !== undefined && minPrice.value !== null && price < minPrice.value) return false
+    if (maxPrice.value !== undefined && maxPrice.value !== null && maxPrice.value > 0 && price > maxPrice.value) return false
+    return true
+  })
+})
 
 onMounted(async () => {
   await loadCategories()
   await loadProducts()
-  if (userStore.isAuthenticated) {
-    await cartStore.getCartList()
-  }
-
-  if (route.query.categoryId) {
-    selectedCategory.value = route.query.categoryId
-  }
 })
 
-watch([selectedCategory, sortBy, searchQuery], () => {
-  currentPage.value = 1
+watch(() => route.query, query => {
+  searchQuery.value = query.keyword || ''
+  selectedCategory.value = query.categoryId || ''
+  sortBy.value = query.sortBy || ''
+  currentPage.value = Number(query.page || 1)
+  minPrice.value = query.minPrice ? Number(query.minPrice) : undefined
+  maxPrice.value = query.maxPrice ? Number(query.maxPrice) : undefined
   loadProducts()
 })
+
+const syncQuery = (patch = {}) => {
+  const query = {
+    keyword: searchQuery.value || undefined,
+    categoryId: selectedCategory.value || undefined,
+    sortBy: sortBy.value || undefined,
+    page: currentPage.value > 1 ? currentPage.value : undefined,
+    minPrice: minPrice.value || undefined,
+    maxPrice: maxPrice.value || undefined,
+    ...patch
+  }
+  router.push({ path: '/products', query })
+}
 
 const loadCategories = async () => {
   try {
     const response = await productAPI.getCategories()
-    categories.value = response.data.data
+    categories.value = (response.data.data || []).filter(item => item.status !== 0)
   } catch (error) {
     console.error('获取分类失败:', error)
   }
 }
 
 const loadProducts = async () => {
+  loading.value = true
   try {
-    loading.value = true
     const params = {
       page: currentPage.value,
-      size: pageSize.value
+      size: pageSize.value,
+      categoryId: selectedCategory.value || undefined,
+      keyword: searchQuery.value || undefined,
+      sortBy: sortBy.value || undefined
     }
-
-    if (selectedCategory.value) {
-      params.categoryId = selectedCategory.value
-    }
-    if (searchQuery.value) {
-      params.keyword = searchQuery.value
-    }
-    if (sortBy.value) {
-      params.sortBy = sortBy.value
-    }
-
     const response = await productAPI.getList(params)
-    products.value = response.data.data.records
-    total.value = response.data.data.total
+    products.value = response.data.data?.records || []
+    total.value = response.data.data?.total || 0
   } catch (error) {
     console.error('获取商品失败:', error)
+    ElMessage.error('获取商品失败')
   } finally {
     loading.value = false
   }
 }
 
-const search = () => {
+const setCategory = (categoryId) => {
+  selectedCategory.value = categoryId
   currentPage.value = 1
-  loadProducts()
+  syncQuery({ categoryId: categoryId || undefined, page: undefined })
 }
 
-const handleSizeChange = (size) => {
-  pageSize.value = size
+const setSort = (value) => {
+  sortBy.value = value
+  currentPage.value = 1
+  syncQuery({ sortBy: value || undefined, page: undefined })
+}
+
+const applyPrice = () => {
+  currentPage.value = 1
+  syncQuery({ page: undefined })
+}
+
+const handleSizeChange = () => {
+  currentPage.value = 1
   loadProducts()
 }
 
 const handleCurrentChange = (page) => {
   currentPage.value = page
-  loadProducts()
+  syncQuery({ page: page > 1 ? page : undefined })
+}
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  selectedCategory.value = ''
+  sortBy.value = ''
+  minPrice.value = undefined
+  maxPrice.value = undefined
+  currentPage.value = 1
+  syncQuery({})
 }
 
 const goToDetail = (productId) => {
@@ -221,228 +220,115 @@ const addToCart = async (productId) => {
 
   try {
     await cartStore.addToCart(productId)
-    ElMessage.success('添加购物车成功')
+    ElMessage.success('已加入购物车')
   } catch (error) {
     ElMessage.error(error.message || '添加购物车失败')
   }
 }
-
-const logout = () => {
-  userStore.logout()
-  ElMessage.success('退出成功')
-  router.push('/home')
-}
 </script>
 
 <style scoped>
-.products {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+.products-page {
+  padding-top: 18px;
 }
 
-.navbar {
+.crumb {
+  color: #999;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.filter-board {
   background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  border-radius: 8px;
+  border: 1px solid #eee;
 }
 
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-.navbar .container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 60px;
-}
-
-.logo a {
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
-  text-decoration: none;
-}
-
-.nav {
-  display: flex;
-  gap: 30px;
-}
-
-.nav-item {
-  color: #666;
-  text-decoration: none;
-  font-size: 16px;
-  transition: color 0.3s;
-}
-
-.nav-item:hover,
-.nav-item.active {
-  color: #409eff;
-}
-
-.user {
+.filter-row {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.welcome {
-  color: #666;
+.filter-row:last-child {
+  border-bottom: 0;
 }
 
-.btn {
-  padding: 6px 16px;
-  border: 1px solid #dcdfe6;
+.filter-row > span:first-child {
+  color: #999;
+  width: 42px;
+}
+
+.filter-row button {
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
   border-radius: 4px;
-  background: #fff;
-  color: #666;
+  background: transparent;
   cursor: pointer;
-  transition: all 0.3s;
-  text-decoration: none;
+  color: #333;
 }
 
-.btn:hover {
-  border-color: #409eff;
-  color: #409eff;
+.filter-row button.active,
+.filter-row button:hover {
+  background: #fff3ed;
+  color: #ff5000;
 }
 
-.btn-primary {
-  background: #409eff;
-  color: #fff;
-  border-color: #409eff;
+.tools :deep(.el-input-number) {
+  width: 100px;
 }
 
-.btn-primary:hover {
-  background: #66b1ff;
-  border-color: #66b1ff;
-  color: #fff;
+.dash {
+  color: #bbb;
 }
 
-.cart-badge {
-  background: #f56c6c;
-  color: #fff;
-  border-radius: 50%;
-  font-size: 12px;
-  padding: 2px 6px;
-  margin-left: 5px;
-}
-
-.filter-section {
-  background: #f5f7fa;
-  padding: 20px 0;
-  border-bottom: 1px solid #e4e7ed;
-}
-
-.filter-bar {
+.list-head {
   display: flex;
-  gap: 20px;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 22px 0 14px;
 }
 
-.search-box {
-  flex: 1;
+.list-head h1 {
+  font-size: 28px;
 }
 
-.category-filter,
-.sort-filter {
-  min-width: 150px;
-}
-
-.product-section {
-  flex: 1;
-  padding: 30px 0;
+.list-head p {
+  margin-top: 6px;
+  color: #888;
 }
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-}
-
-.product-card {
-  background: #fff;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.product-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-}
-
-.product-image {
-  height: 200px;
-  overflow: hidden;
-}
-
-.product-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s;
-}
-
-.product-card:hover .product-image img {
-  transform: scale(1.1);
-}
-
-.product-info {
-  padding: 15px;
-}
-
-.product-name {
-  font-size: 16px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 10px;
-  height: 48px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.product-price {
-  font-size: 18px;
-  font-weight: bold;
-  color: #f56c6c;
-  margin-bottom: 15px;
-}
-
-.product-buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.loading {
-  padding: 40px 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .pagination {
-  margin-top: 30px;
   display: flex;
   justify-content: center;
+  margin-top: 26px;
 }
 
-.footer {
-  background: #f5f7fa;
-  padding: 30px 0;
-  margin-top: auto;
+@media (max-width: 980px) {
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.footer p {
-  text-align: center;
-  color: #666;
-  font-size: 14px;
+@media (max-width: 560px) {
+  .list-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -1,124 +1,133 @@
 <template>
-  <div class="address">
-    <!-- 导航栏 -->
-    <header class="navbar">
-      <div class="container">
-        <div class="logo">
-          <router-link to="/">家具商城</router-link>
+  <UserLayout>
+    <section class="shop-container address-page">
+      <div class="page-head">
+        <div>
+          <h1>地址管理</h1>
+          <p>管理收货地址、默认地址和配送联系信息</p>
         </div>
-        <nav class="nav">
-          <router-link to="/home" class="nav-item">首页</router-link>
-          <router-link to="/products" class="nav-item">商品列表</router-link>
-          <router-link to="/cart" class="nav-item">
-            购物车
-            <span v-if="cartStore.totalQuantity > 0" class="cart-badge">{{ cartStore.totalQuantity }}</span>
-          </router-link>
-        </nav>
-        <div class="user">
-          <template v-if="userStore.isAuthenticated">
-            <span class="welcome">欢迎, {{ userStore.user.username }}</span>
-            <router-link to="/profile" class="nav-item">个人中心</router-link>
-            <router-link to="/orders" class="nav-item">我的订单</router-link>
-            <button @click="logout" class="btn">退出</button>
-          </template>
-          <template v-else>
-            <router-link to="/login" class="btn">登录</router-link>
-            <router-link to="/register" class="btn btn-primary">注册</router-link>
-          </template>
-        </div>
+        <el-button type="primary" @click="handleAdd">新增地址</el-button>
       </div>
-    </header>
 
-    <!-- 地址管理 -->
-    <div class="address-section">
-      <div class="container">
-        <h2 class="page-title">地址管理</h2>
-        
-        <el-button type="primary" @click="handleAdd" class="add-btn">添加收货地址</el-button>
-        
-        <div class="address-list" v-if="addresses.length > 0">
-          <div v-for="address in addresses" :key="address.id" class="address-item">
-            <div class="address-content">
-              <div class="address-header">
-                <span class="address-name">{{ address.receiver }}</span>
-                <span class="address-phone">{{ address.phone }}</span>
-                <span v-if="address.isDefault" class="default-tag">默认</span>
-              </div>
-              <div class="address-detail">{{ address.province }} {{ address.city }} {{ address.district }} {{ address.detail }}</div>
-            </div>
-            <div class="address-actions">
-              <el-button @click="handleEdit(address)">编辑</el-button>
-              <el-button v-if="!address.isDefault" @click="setDefault(address.id)">设为默认</el-button>
-              <el-button type="danger" @click="handleDelete(address.id)">删除</el-button>
-            </div>
-          </div>
-        </div>
-        
-        <div v-else class="empty-address">
-          <el-empty description="暂无收货地址" />
-          <el-button type="primary" @click="handleAdd">添加收货地址</el-button>
-        </div>
+      <div class="address-tips">
+        <span>已保存 {{ addresses.length }} 个地址</span>
+        <span>默认地址会在结算时优先使用</span>
       </div>
-    </div>
 
-    <!-- 添加/编辑地址对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle">
-      <el-form :model="addressForm" :rules="addressRules" ref="addressFormRef" label-width="100px">
+      <el-skeleton v-if="loading" :rows="6" animated />
+
+      <div v-else-if="addresses.length === 0" class="empty">
+        <el-empty description="暂无收货地址" />
+        <el-button type="primary" @click="handleAdd">添加收货地址</el-button>
+      </div>
+
+      <div v-else class="address-grid">
+        <article
+          v-for="address in addresses"
+          :key="address.id"
+          :class="['address-card', { default: address.isDefault }]"
+        >
+          <header>
+            <div>
+              <strong>{{ address.receiver }}</strong>
+              <span>{{ maskPhone(address.phone) }}</span>
+            </div>
+            <el-tag v-if="address.isDefault" type="danger" effect="light">默认地址</el-tag>
+          </header>
+
+          <p>{{ fullAddress(address) }}</p>
+
+          <footer>
+            <button type="button" @click="copyAddress(address)">复制地址</button>
+            <button v-if="!address.isDefault" type="button" @click="setDefault(address.id)">设为默认</button>
+            <button type="button" @click="handleEdit(address)">修改</button>
+            <button type="button" class="danger" @click="handleDelete(address.id)">删除</button>
+          </footer>
+        </article>
+      </div>
+    </section>
+
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="640px">
+      <div class="smart-paste">
+        <el-input
+          v-model="smartText"
+          type="textarea"
+          :rows="2"
+          placeholder="粘贴姓名 手机号 省市区详细地址，可自动拆分"
+        />
+        <el-button @click="parseSmartText">智能识别</el-button>
+      </div>
+
+      <el-form :model="addressForm" :rules="addressRules" ref="addressFormRef" label-width="96px">
         <el-form-item label="收货人" prop="receiver">
-          <el-input v-model="addressForm.receiver" />
+          <el-input v-model="addressForm.receiver" maxlength="20" show-word-limit />
         </el-form-item>
         <el-form-item label="手机号" prop="phone">
-          <el-input v-model="addressForm.phone" />
+          <el-input v-model="addressForm.phone" maxlength="11" />
         </el-form-item>
-        <el-form-item label="省份" prop="province">
-          <el-input v-model="addressForm.province" />
-        </el-form-item>
-        <el-form-item label="城市" prop="city">
-          <el-input v-model="addressForm.city" />
-        </el-form-item>
-        <el-form-item label="区县" prop="district">
-          <el-input v-model="addressForm.district" />
+        <el-form-item label="所在地区" required>
+          <div class="region-row">
+            <el-form-item prop="province">
+              <el-input v-model="addressForm.province" placeholder="省/自治区" />
+            </el-form-item>
+            <el-form-item prop="city">
+              <el-input v-model="addressForm.city" placeholder="市" />
+            </el-form-item>
+            <el-form-item prop="district">
+              <el-input v-model="addressForm.district" placeholder="区/县" />
+            </el-form-item>
+          </div>
         </el-form-item>
         <el-form-item label="详细地址" prop="detail">
-          <el-input v-model="addressForm.detail" type="textarea" />
+          <el-input
+            v-model="addressForm.detail"
+            type="textarea"
+            :rows="3"
+            maxlength="120"
+            show-word-limit
+            placeholder="街道、小区、楼栋门牌号"
+          />
         </el-form-item>
-        <el-form-item label="设为默认">
-          <el-switch v-model="addressForm.isDefault" />
+        <el-form-item label="地址标签">
+          <el-radio-group v-model="addressForm.tag">
+            <el-radio-button label="家" />
+            <el-radio-button label="公司" />
+            <el-radio-button label="学校" />
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="默认地址">
+          <el-switch v-model="addressForm.isDefault" active-text="设为默认" />
         </el-form-item>
       </el-form>
+
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleSave">保存</el-button>
-        </span>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">保存地址</el-button>
       </template>
     </el-dialog>
-
-    <!-- 页脚 -->
-    <footer class="footer">
-      <div class="container">
-        <p>&copy; 2026 家具商城. 保留所有权利.</p>
-      </div>
-    </footer>
-  </div>
+  </UserLayout>
 </template>
 
 <script setup>
-import { ref, onMounted, reactive } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '../../stores/user'
-import { useCartStore } from '../../stores/cart'
-import { addressAPI } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import UserLayout from '../../components/UserLayout.vue'
+import { addressAPI } from '../../api'
+import { useCartStore } from '../../stores/cart'
+import { useUserStore } from '../../stores/user'
 
 const router = useRouter()
 const userStore = useUserStore()
 const cartStore = useCartStore()
 
+const loading = ref(false)
+const saving = ref(false)
 const addresses = ref([])
 const dialogVisible = ref(false)
-const dialogTitle = ref('添加收货地址')
+const dialogTitle = ref('新增收货地址')
 const addressFormRef = ref(null)
+const smartText = ref('')
 
 const addressForm = reactive({
   id: null,
@@ -128,12 +137,21 @@ const addressForm = reactive({
   city: '',
   district: '',
   detail: '',
+  tag: '家',
   isDefault: false
 })
 
+const validatePhone = (rule, value, callback) => {
+  if (!/^1[3-9]\d{9}$/.test(value || '')) {
+    callback(new Error('请输入11位中国大陆手机号'))
+    return
+  }
+  callback()
+}
+
 const addressRules = {
   receiver: [{ required: true, message: '请输入收货人', trigger: 'blur' }],
-  phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
+  phone: [{ required: true, validator: validatePhone, trigger: 'blur' }],
   province: [{ required: true, message: '请输入省份', trigger: 'blur' }],
   city: [{ required: true, message: '请输入城市', trigger: 'blur' }],
   district: [{ required: true, message: '请输入区县', trigger: 'blur' }],
@@ -151,27 +169,31 @@ onMounted(async () => {
 
 const loadAddresses = async () => {
   try {
+    loading.value = true
     const response = await addressAPI.getList()
-    addresses.value = (response.data.data || []).map(addr => ({
-      id: addr.id,
-      receiver: addr.name,
-      phone: addr.phone,
-      province: addr.province,
-      city: addr.city,
-      district: addr.district,
-      detail: addr.detailAddress,
-      isDefault: addr.isDefault === 1
-    }))
+    addresses.value = (response.data.data || []).map(normalizeAddress)
   } catch (error) {
-    console.error('获取地址失败:', error)
-    ElMessage.error('获取地址失败')
+    ElMessage.error(error.response?.data?.msg || '获取地址失败')
+  } finally {
+    loading.value = false
   }
 }
 
-
+const normalizeAddress = addr => ({
+  id: addr.id,
+  receiver: addr.name,
+  phone: addr.phone,
+  province: addr.province,
+  city: addr.city,
+  district: addr.district,
+  detail: addr.detailAddress,
+  tag: addr.tag || inferTag(addr.detailAddress),
+  isDefault: addr.isDefault === 1
+})
 
 const handleAdd = () => {
-  dialogTitle.value = '添加收货地址'
+  dialogTitle.value = '新增收货地址'
+  smartText.value = ''
   Object.assign(addressForm, {
     id: null,
     receiver: '',
@@ -180,277 +202,247 @@ const handleAdd = () => {
     city: '',
     district: '',
     detail: '',
-    isDefault: false
+    tag: '家',
+    isDefault: addresses.value.length === 0
   })
   dialogVisible.value = true
 }
 
-const handleEdit = (address) => {
-  dialogTitle.value = '编辑收货地址'
+const handleEdit = address => {
+  dialogTitle.value = '修改收货地址'
+  smartText.value = ''
   Object.assign(addressForm, address)
   dialogVisible.value = true
 }
 
 const handleSave = async () => {
   if (!addressFormRef.value) return
+  await addressFormRef.value.validate()
+
+  const payload = {
+    name: addressForm.receiver.trim(),
+    phone: addressForm.phone.trim(),
+    province: addressForm.province.trim(),
+    city: addressForm.city.trim(),
+    district: addressForm.district.trim(),
+    detailAddress: addressForm.detail.trim(),
+    isDefault: addressForm.isDefault ? 1 : 0
+  }
 
   try {
-    await addressFormRef.value.validate()
-
-    const submitData = {
-      name: addressForm.receiver,
-      phone: addressForm.phone,
-      province: addressForm.province,
-      city: addressForm.city,
-      district: addressForm.district,
-      detailAddress: addressForm.detail,
-      isDefault: addressForm.isDefault ? 1 : 0
-    }
-
+    saving.value = true
     if (addressForm.id) {
-      await addressAPI.update(addressForm.id, submitData)
-      ElMessage.success('更新成功')
+      await addressAPI.update(addressForm.id, payload)
+      ElMessage.success('地址已更新')
     } else {
-      await addressAPI.create(submitData)
-      ElMessage.success('添加成功')
+      await addressAPI.create(payload)
+      ElMessage.success('地址已添加')
     }
-
     dialogVisible.value = false
     await loadAddresses()
   } catch (error) {
-    // 显示错误信息，但不关闭对话框，也不重新加载地址列表
-    ElMessage.error(error.response?.data?.msg || error.message || '操作失败')
+    ElMessage.error(error.response?.data?.msg || error.message || '保存失败')
+  } finally {
+    saving.value = false
   }
 }
 
-const setDefault = async (id) => {
+const setDefault = async id => {
   try {
     await addressAPI.setDefault(id)
-    ElMessage.success('设置默认地址成功')
+    ElMessage.success('默认地址已更新')
     await loadAddresses()
   } catch (error) {
-    ElMessage.error(error.message || '设置失败')
+    ElMessage.error(error.response?.data?.msg || '设置失败')
   }
 }
 
-const handleDelete = async (id) => {
+const handleDelete = async id => {
   try {
-    await ElMessageBox.confirm('确定要删除这个地址吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
+    await ElMessageBox.confirm('删除后该地址不可恢复，确定删除吗？', '删除地址', { type: 'warning' })
     await addressAPI.remove(id)
-    ElMessage.success('删除成功')
+    ElMessage.success('地址已删除')
     await loadAddresses()
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
-    }
+    if (error !== 'cancel') ElMessage.error(error.response?.data?.msg || '删除失败')
   }
 }
 
-const logout = () => {
-  userStore.logout()
-  ElMessage.success('退出成功')
-  router.push('/home')
+const parseSmartText = () => {
+  const text = smartText.value.trim().replace(/\s+/g, ' ')
+  const phone = text.match(/1[3-9]\d{9}/)?.[0]
+  if (phone) addressForm.phone = phone
+
+  const withoutPhone = phone ? text.replace(phone, '').trim() : text
+  const parts = withoutPhone.split(' ').filter(Boolean)
+  if (parts.length > 0) addressForm.receiver = parts[0]
+
+  const addressText = parts.slice(1).join('')
+  const region = addressText.match(/^(.+?(省|自治区|市))(.+?市)?(.+?(区|县|旗))?(.*)$/)
+  if (region) {
+    addressForm.province = region[1] || addressForm.province
+    addressForm.city = (region[3] || '').replace(/市$/, '市') || addressForm.city
+    addressForm.district = region[4] || addressForm.district
+    addressForm.detail = region[6] || addressForm.detail
+  } else if (addressText) {
+    addressForm.detail = addressText
+  }
+}
+
+const copyAddress = async address => {
+  await copyToClipboard(`${address.receiver} ${address.phone} ${fullAddress(address)}`)
+  ElMessage.success('地址已复制')
+}
+
+const fullAddress = address => `${address.province} ${address.city} ${address.district} ${address.detail}`.replace(/\s+/g, ' ').trim()
+const maskPhone = phone => phone ? `${phone.slice(0, 3)}****${phone.slice(7)}` : ''
+const inferTag = detail => {
+  if (/公司|园区|写字楼|大厦/.test(detail || '')) return '公司'
+  if (/学校|大学|学院|校区/.test(detail || '')) return '学校'
+  return '家'
+}
+const copyToClipboard = async text => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  const input = document.createElement('textarea')
+  input.value = text
+  document.body.appendChild(input)
+  input.select()
+  document.execCommand('copy')
+  document.body.removeChild(input)
 }
 </script>
 
 <style scoped>
-.address {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+.address-page {
+  padding: 28px 20px 48px;
 }
 
-.navbar {
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-.navbar .container {
+.page-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 60px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-.logo a {
+.page-head h1 {
+  margin: 0 0 6px;
   font-size: 24px;
-  font-weight: bold;
-  color: #333;
-  text-decoration: none;
 }
 
-.nav {
+.page-head p,
+.address-tips,
+.address-card p {
+  color: #606266;
+}
+
+.address-tips {
   display: flex;
-  gap: 30px;
-}
-
-.nav-item {
-  color: #666;
-  text-decoration: none;
-  font-size: 16px;
-  transition: color 0.3s;
-}
-
-.nav-item:hover {
-  color: #409eff;
-}
-
-.user {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.welcome {
-  color: #666;
-}
-
-.btn {
-  padding: 6px 16px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  background: #fff;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.3s;
-  text-decoration: none;
-}
-
-.btn:hover {
-  border-color: #409eff;
-  color: #409eff;
-}
-
-.btn-primary {
-  background: #409eff;
-  color: #fff;
-  border-color: #409eff;
-}
-
-.btn-primary:hover {
-  background: #66b1ff;
-  border-color: #66b1ff;
-  color: #fff;
-}
-
-.cart-badge {
-  background: #f56c6c;
-  color: #fff;
-  border-radius: 50%;
-  font-size: 12px;
-  padding: 2px 6px;
-  margin-left: 5px;
-}
-
-.address-section {
-  flex: 1;
-  padding: 40px 0;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 30px;
-}
-
-.add-btn {
-  margin-bottom: 30px;
-}
-
-.address-list {
-  display: flex;
-  flex-direction: column;
   gap: 20px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
 }
 
-.address-item {
+.empty {
+  padding: 60px 0;
   background: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-  padding: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  text-align: center;
 }
 
-.address-content {
-  flex: 1;
+.address-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 14px;
 }
 
-.address-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  margin-bottom: 10px;
-}
-
-.address-name {
-  font-weight: bold;
-  color: #333;
-}
-
-.address-phone {
-  color: #666;
-}
-
-.default-tag {
-  background: #409eff;
-  color: #fff;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.address-detail {
-  color: #666;
-  line-height: 1.5;
-}
-
-.address-actions {
+.address-card {
+  min-height: 176px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+}
+
+.address-card.default {
+  border-color: #f56c6c;
+}
+
+.address-card header,
+.address-card header div,
+.address-card footer {
+  display: flex;
+  align-items: center;
   gap: 10px;
 }
 
-.empty-address {
-  text-align: center;
-  padding: 60px 0;
-  background: #f5f7fa;
-  border-radius: 8px;
+.address-card header {
+  justify-content: space-between;
 }
 
-.empty-address .el-button {
-  margin-top: 20px;
+.address-card strong {
+  font-size: 18px;
 }
 
-.dialog-footer {
-  text-align: right;
+.address-card p {
+  line-height: 1.7;
+  margin: 18px 0;
 }
 
-.footer {
-  background: #f5f7fa;
-  padding: 30px 0;
-  margin-top: auto;
+.address-card footer {
+  flex-wrap: wrap;
 }
 
-.footer p {
-  text-align: center;
-  color: #666;
-  font-size: 14px;
+.address-card button {
+  border: 0;
+  background: none;
+  color: #409eff;
+  cursor: pointer;
+}
+
+.address-card button.danger {
+  color: #f56c6c;
+}
+
+.smart-paste {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.region-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+}
+
+.region-row :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .page-head,
+  .smart-paste {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+    display: grid;
+  }
+
+  .address-tips,
+  .region-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
 }
 </style>

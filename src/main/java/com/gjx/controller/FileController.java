@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.UUID;
 
 /**
@@ -17,17 +20,20 @@ import java.util.UUID;
 @RequestMapping("/api/files")
 public class FileController {
 
-    @Value("${oss.endpoint}")
+    @Value("${oss.endpoint:}")
     private String endpoint;
 
-    @Value("${oss.bucket-name}")
+    @Value("${oss.bucket-name:}")
     private String bucketName;
 
-    @Value("${oss.access-key-id}")
+    @Value("${oss.access-key-id:}")
     private String accessKeyId;
 
-    @Value("${oss.access-key-secret}")
+    @Value("${oss.access-key-secret:}")
     private String accessKeySecret;
+
+    @Value("${file.upload-dir:/tmp/furniture-uploads/}")
+    private String uploadDir;
 
     /**
      * 上传文件
@@ -36,53 +42,71 @@ public class FileController {
      */
     @PostMapping("/upload")
     public R<?> upload(@RequestParam("file") MultipartFile file) {
-        System.out.println("========== 开始处理文件上传 ==========");
-        System.out.println("文件信息: " + file.getOriginalFilename() + ", 大小: " + file.getSize());
-        System.out.println("OSS配置 - endpoint: " + endpoint + ", bucket: " + bucketName);
-        System.out.println("Access Key ID: " + accessKeyId);
-
         if (file.isEmpty()) {
-            System.out.println("文件为空");
             return R.error("请选择要上传的文件");
         }
 
-        OSS ossClient = null;
         try {
-            // 生成唯一文件名
             String originalFilename = file.getOriginalFilename();
-            String suffix = originalFilename.substring(originalFilename.lastIndexOf("."));
-            String fileName = "uploads/" + UUID.randomUUID().toString() + suffix;
-            System.out.println("生成的文件名: " + fileName);
+            String suffix = getFileSuffix(originalFilename);
+            String fileName = UUID.randomUUID() + suffix;
 
-            // 初始化OSS客户端
-            System.out.println("初始化OSS客户端...");
-            ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
-            System.out.println("OSS客户端初始化成功");
-
-            // 获取文件输入流
-            try (InputStream inputStream = file.getInputStream()) {
-                System.out.println("开始上传文件到OSS...");
-                // 上传文件到OSS
-                ossClient.putObject(bucketName, fileName, inputStream);
-                System.out.println("文件上传成功");
+            if (hasOssConfig()) {
+                return uploadToOss(file, fileName);
             }
 
-            // 生成文件URL
-            String fileUrl = "https://" + bucketName + ".oss-cn-beijing.aliyuncs.com/" + fileName;
-            System.out.println("生成的URL: " + fileUrl);
-            System.out.println("========== 文件上传成功 ==========");
-
-            return R.ok(fileUrl);
+            return uploadToLocal(file, fileName);
         } catch (Exception e) {
-            System.out.println("========== 文件上传失败 ==========");
             e.printStackTrace();
-            System.out.println("错误信息: " + e.getMessage());
             return R.error("文件上传失败: " + e.getMessage());
+        }
+    }
+
+    private R<?> uploadToOss(MultipartFile file, String fileName) throws Exception {
+        OSS ossClient = null;
+        String objectName = "uploads/" + fileName;
+        try {
+            ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
+            try (InputStream inputStream = file.getInputStream()) {
+                ossClient.putObject(bucketName, objectName, inputStream);
+            }
+            return R.ok("https://" + bucketName + ".oss-cn-beijing.aliyuncs.com/" + objectName);
         } finally {
-            // 关闭OSS客户端
             if (ossClient != null) {
                 ossClient.shutdown();
             }
         }
+    }
+
+    private R<?> uploadToLocal(MultipartFile file, String fileName) throws Exception {
+        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Files.createDirectories(uploadPath);
+
+        Path target = uploadPath.resolve(fileName).normalize();
+        if (!target.startsWith(uploadPath)) {
+            return R.error("非法文件名");
+        }
+
+        file.transferTo(target);
+        return R.ok("/uploads/" + fileName);
+    }
+
+    private boolean hasOssConfig() {
+        return hasText(endpoint) && hasText(bucketName) && hasText(accessKeyId) && hasText(accessKeySecret);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private String getFileSuffix(String originalFilename) {
+        if (originalFilename == null) {
+            return "";
+        }
+        int dotIndex = originalFilename.lastIndexOf(".");
+        if (dotIndex < 0 || dotIndex == originalFilename.length() - 1) {
+            return "";
+        }
+        return originalFilename.substring(dotIndex);
     }
 }

@@ -38,9 +38,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         }
 
         if (keyword != null && !keyword.isEmpty()) {
-            queryWrapper.like(Product::getName, keyword)
+            queryWrapper.and(wrapper -> wrapper
+                    .like(Product::getName, keyword)
                     .or().like(Product::getBrand, keyword)
-                    .or().like(Product::getDescription, keyword);
+                    .or().like(Product::getDescription, keyword));
         }
 
         // 排序逻辑
@@ -48,6 +49,9 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             queryWrapper.orderByAsc(Product::getPrice);
         } else if ("price_desc".equals(sortBy)) {
             queryWrapper.orderByDesc(Product::getPrice);
+        } else if ("sales_desc".equals(sortBy)) {
+            queryWrapper.orderByDesc(Product::getSales)
+                    .orderByDesc(Product::getCreateTime);
         } else {
             queryWrapper.orderByDesc(Product::getCreateTime);
         }
@@ -66,9 +70,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         queryWrapper.eq(Product::getStatus, 1);
 
         if (keyword != null && !keyword.isEmpty()) {
-            queryWrapper.like(Product::getName, keyword)
+            queryWrapper.and(wrapper -> wrapper
+                    .like(Product::getName, keyword)
                     .or().like(Product::getBrand, keyword)
-                    .or().like(Product::getDescription, keyword);
+                    .or().like(Product::getDescription, keyword));
         }
 
         queryWrapper.orderByDesc(Product::getSales)

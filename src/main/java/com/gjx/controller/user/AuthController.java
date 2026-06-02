@@ -47,8 +47,8 @@ public class AuthController {
                 return R.error(ResultCode.UNAUTHORIZED, "用户不存在");
             }
 
-            // 验证密码（直接比较明文）
-            if (!loginRequest.getPassword().equals(user.getPassword())) {
+            // 验证密码
+            if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
                 return R.error(ResultCode.UNAUTHORIZED, "密码错误");
             }
 
@@ -109,6 +109,7 @@ public class AuthController {
 
             // 设置默认角色
             user.setRole("USER");
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
 
             // 保存用户
             userService.save(user);

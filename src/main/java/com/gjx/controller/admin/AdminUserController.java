@@ -7,6 +7,7 @@ import com.gjx.service.IUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -22,6 +23,9 @@ public class AdminUserController {
     @Autowired
     private IUserService userService;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @Operation(summary = "获取用户列表", description = "获取所有用户列表，支持分页和用户名搜索")
     @GetMapping
     public R<Page<User>> list(
@@ -29,6 +33,7 @@ public class AdminUserController {
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String username) {
         Page<User> userPage = userService.adminListUsers(page, size, username);
+        userPage.getRecords().forEach(user -> user.setPassword(null));
         return R.ok(userPage);
     }
 
@@ -51,6 +56,9 @@ public class AdminUserController {
         }
         if (user.getRole() == null || user.getRole().isEmpty()) {
             user.setRole("USER");
+        }
+        if (user.getPassword() != null && !user.getPassword().isEmpty()) {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
         }
         userService.save(user);
         return R.ok("创建成功");
@@ -75,6 +83,8 @@ public class AdminUserController {
 
         if (user.getPassword() == null || user.getPassword().isEmpty()) {
             user.setPassword(existingUser.getPassword());
+        } else {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
         }
 
         userService.updateById(user);
@@ -101,7 +111,7 @@ public class AdminUserController {
             return R.error("密码不能为空");
         }
 
-        user.setPassword(password);
+        user.setPassword(passwordEncoder.encode(password));
         userService.updateById(user);
         return R.ok("密码重置成功");
     }

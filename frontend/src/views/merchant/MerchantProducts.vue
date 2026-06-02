@@ -1,146 +1,126 @@
 <template>
-  <div class="merchant-products">
-    <!-- 导航栏 -->
-    <header class="navbar">
-      <div class="container">
-        <div class="logo">
-          <router-link to="/merchant">家具商城-商家管理</router-link>
-        </div>
-        <nav class="nav">
-          <router-link to="/merchant" class="nav-item">首页</router-link>
-          <router-link to="/merchant/products" class="nav-item">商品管理</router-link>
-          <router-link to="/merchant/categories" class="nav-item">商品分类</router-link>
-          <router-link to="/merchant/orders" class="nav-item">订单管理</router-link>
-        </nav>
-        <div class="user">
-          <template v-if="userStore.isAuthenticated">
-            <span class="welcome">欢迎, {{ userStore.user.username }}</span>
-            <button @click="logout" class="btn">退出</button>
-          </template>
-        </div>
+  <MerchantLayout title="商品管理" subtitle="发布、编辑、下架和维护店铺商品">
+    <div class="page-tools">
+      <div class="summary-card">
+        <span>全部商品</span>
+        <strong>{{ total }}</strong>
       </div>
-    </header>
-
-    <!-- 内容区域 -->
-    <div class="content">
-      <div class="container">
-        <div class="page-header">
-          <h1 class="page-title">商品管理</h1>
-          <el-button type="primary" @click="handleAdd">添加商品</el-button>
-        </div>
-
-        <!-- 商品列表 -->
-        <div class="product-list" v-if="products.length > 0">
-          <div v-for="product in products" :key="product.id" class="product-item">
-            <div class="product-image">
-              <img :src="product.mainImage || '/placeholder.png'" :alt="product.name" />
-            </div>
-            <div class="product-info">
-              <div class="product-name">{{ product.name }}</div>
-              <div class="product-brand">{{ product.brand }}</div>
-              <div class="product-price">¥{{ product.price }}</div>
-              <div class="product-stock">库存: {{ product.stock }}</div>
-              <div class="product-status">
-                <el-tag :type="product.status === 1 ? 'success' : 'info'">
-                  {{ product.status === 1 ? '上架' : '下架' }}
-                </el-tag>
-              </div>
-            </div>
-            <div class="product-actions">
-              <el-button @click="handleEdit(product)">编辑</el-button>
-              <el-button type="danger" @click="handleDelete(product.id)">删除</el-button>
-            </div>
-          </div>
-        </div>
-
-        <el-empty v-else description="暂无商品" />
-
-        <!-- 分页 -->
-        <el-pagination
-          v-if="total > 0"
-          v-model:current-page="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          layout="prev, pager, next"
-          @current-change="loadProducts"
-          class="pagination"
-        />
+      <div class="summary-card">
+        <span>当前页在售</span>
+        <strong>{{ products.filter(item => item.status === 1).length }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>库存预警</span>
+        <strong>{{ products.filter(item => Number(item.stock) <= 5).length }}</strong>
       </div>
     </div>
 
-    <!-- 添加/编辑商品对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="600px">
-      <el-form :model="productForm" :rules="productRules" ref="productFormRef" label-width="100px">
+    <section class="seller-panel">
+      <div class="panel-toolbar">
+        <el-tabs v-model="statusFilter" @tab-change="loadProducts">
+          <el-tab-pane label="全部宝贝" name="all" />
+          <el-tab-pane label="出售中" name="1" />
+          <el-tab-pane label="仓库中" name="0" />
+        </el-tabs>
+        <div class="search-actions">
+          <el-input v-model="keyword" clearable placeholder="搜索商品名称/品牌" @keyup.enter="loadProducts" />
+          <el-button @click="loadProducts">搜索</el-button>
+          <el-button type="primary" @click="handleAdd">发布商品</el-button>
+        </div>
+      </div>
+
+      <el-table :data="filteredProducts" row-key="id">
+        <el-table-column label="商品" min-width="320">
+          <template #default="{ row }">
+            <div class="goods-cell">
+              <img :src="row.mainImage || fallbackImage" :alt="row.name">
+              <div>
+                <strong>{{ row.name }}</strong>
+                <span>{{ row.brand || '未填写品牌' }}</span>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="price" label="价格" width="120">
+          <template #default="{ row }">¥{{ money(row.price) }}</template>
+        </el-table-column>
+        <el-table-column prop="stock" label="库存" width="100" />
+        <el-table-column prop="sales" label="销量" width="100" />
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 1 ? 'success' : 'info'">{{ row.status === 1 ? '出售中' : '仓库中' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="190" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link @click="copyProduct(row)">复制链接</el-button>
+            <el-button link type="danger" @click="handleDelete(row.id)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-empty v-if="!filteredProducts.length" description="暂无商品" />
+
+      <el-pagination
+        v-if="total > 0"
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="total"
+        layout="total, prev, pager, next"
+        @current-change="loadProducts"
+      />
+    </section>
+
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px">
+      <el-form :model="productForm" :rules="productRules" ref="productFormRef" label-width="96px">
         <el-form-item label="商品名称" prop="name">
-          <el-input v-model="productForm.name" />
+          <el-input v-model="productForm.name" maxlength="60" show-word-limit />
         </el-form-item>
         <el-form-item label="商品分类" prop="categoryId">
-          <el-select v-model="productForm.categoryId" placeholder="请选择分类">
-            <el-option
-              v-for="category in flatCategories"
-              :key="category.id"
-              :label="category.name"
-              :value="category.id"
-            />
+          <el-select v-model="productForm.categoryId" placeholder="请选择分类" filterable>
+            <el-option v-for="category in flatCategories" :key="category.id" :label="category.name" :value="category.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="品牌" prop="brand">
-          <el-input v-model="productForm.brand" />
-        </el-form-item>
-        <el-form-item label="价格" prop="price">
-          <el-input-number v-model="productForm.price" :min="0" :precision="2" />
-        </el-form-item>
-        <el-form-item label="库存" prop="stock">
-          <el-input-number v-model="productForm.stock" :min="0" />
-        </el-form-item>
-        <el-form-item label="主图" prop="mainImage">
-          <el-upload
-            class="upload-demo"
-            action=""
-            :http-request="handleImageUpload"
-            :auto-upload="true"
-            accept="image/*"
-            :show-file-list="false"
-          >
-            <el-button type="primary">点击上传</el-button>
-            <template #tip>
-              <div class="el-upload__tip">
-                只能上传图片文件，且不超过10MB
-              </div>
-            </template>
-          </el-upload>
-          <div v-if="productForm.mainImage" style="margin-top: 10px">
-            <img :src="productForm.mainImage" :alt="productForm.name" style="width: 100px; height: 100px; object-fit: cover; border-radius: 4px">
+        <div class="form-grid">
+          <el-form-item label="品牌" prop="brand">
+            <el-input v-model="productForm.brand" />
+          </el-form-item>
+          <el-form-item label="价格" prop="price">
+            <el-input-number v-model="productForm.price" :min="0" :precision="2" />
+          </el-form-item>
+          <el-form-item label="库存" prop="stock">
+            <el-input-number v-model="productForm.stock" :min="0" />
+          </el-form-item>
+        </div>
+        <el-form-item label="商品主图" prop="mainImage">
+          <div class="upload-row">
+            <el-upload action="" :http-request="handleImageUpload" :auto-upload="true" accept="image/*" :show-file-list="false">
+              <el-button type="primary">上传主图</el-button>
+            </el-upload>
+            <el-input v-model="productForm.mainImage" placeholder="或输入图片 URL" />
           </div>
-          <el-input v-model="productForm.mainImage" placeholder="或输入图片URL" style="margin-top: 10px;" />
+          <img v-if="productForm.mainImage" :src="productForm.mainImage" :alt="productForm.name" class="preview-image">
         </el-form-item>
         <el-form-item label="商品描述" prop="description">
-          <el-input v-model="productForm.description" type="textarea" rows="4" />
+          <el-input v-model="productForm.description" type="textarea" :rows="5" maxlength="500" show-word-limit />
         </el-form-item>
       </el-form>
       <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleSave">保存</el-button>
-        </span>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSave">保存并上架</el-button>
       </template>
     </el-dialog>
-
-    <!-- 页脚 -->
-    <footer class="footer">
-      <div class="container">
-        <p>&copy; 2026 家具商城. 保留所有权利.</p>
-      </div>
-    </footer>
-  </div>
+  </MerchantLayout>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useUserStore } from '../../stores/user'
-import { merchantAPI, fileAPI } from '../../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import MerchantLayout from '../../components/MerchantLayout.vue'
+import { fileAPI, merchantAPI } from '../../api'
+import { useUserStore } from '../../stores/user'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -148,39 +128,37 @@ const userStore = useUserStore()
 const products = ref([])
 const categories = ref([])
 const dialogVisible = ref(false)
-const dialogTitle = ref('添加商品')
+const dialogTitle = ref('发布商品')
 const productFormRef = ref(null)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
+const keyword = ref('')
+const statusFilter = ref('all')
+const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
 
-const productForm = ref({
-  id: null,
-  name: '',
-  categoryId: null,
-  brand: '',
-  price: 0,
-  stock: 0,
-  mainImage: '',
-  description: ''
-})
+const productForm = ref(emptyProduct())
 
 const productRules = {
   name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }],
   categoryId: [{ required: true, message: '请选择商品分类', trigger: 'change' }],
   brand: [{ required: true, message: '请输入品牌', trigger: 'blur' }],
   price: [{ required: true, message: '请输入价格', trigger: 'blur' }],
-  stock: [{ required: true, message: '请输入库存', trigger: 'blur' }]
+  stock: [{ required: true, message: '请输入库存', trigger: 'blur' }],
+  mainImage: [{ required: true, message: '请上传或填写商品主图', trigger: 'blur' }]
 }
 
 const flatCategories = computed(() => {
-  // 分类数据现在是分页格式，直接从 records 中获取
   const records = Array.isArray(categories.value) ? categories.value : (categories.value?.records || [])
-  return records.map(cat => ({
-    id: cat.id,
-    name: cat.name
-  }))
+  return records.map(cat => ({ id: cat.id, name: cat.parentName ? `${cat.parentName} / ${cat.name}` : cat.name }))
 })
+
+const filteredProducts = computed(() => products.value.filter(product => {
+  const matchesStatus = statusFilter.value === 'all' || product.status === Number(statusFilter.value)
+  const text = `${product.name} ${product.brand || ''}`.toLowerCase()
+  const matchesKeyword = !keyword.value || text.includes(keyword.value.toLowerCase())
+  return matchesStatus && matchesKeyword
+}))
 
 onMounted(async () => {
   if (!userStore.isAuthenticated) {
@@ -190,304 +168,167 @@ onMounted(async () => {
   await Promise.all([loadProducts(), loadCategories()])
 })
 
+function emptyProduct() {
+  return { id: null, name: '', categoryId: null, brand: '', price: 0, stock: 0, mainImage: '', description: '', status: 1 }
+}
+
 const loadProducts = async () => {
-  try {
-    const response = await merchantAPI.products.getList({
-      page: currentPage.value,
-      size: pageSize.value
-    })
-    products.value = response.data.data.records || []
-    total.value = response.data.data.total || 0
-  } catch (error) {
-    console.error('获取商品列表失败:', error)
-    ElMessage.error('获取商品列表失败')
-  }
+  const response = await merchantAPI.products.getList({ page: currentPage.value, size: pageSize.value })
+  products.value = response.data.data.records || []
+  total.value = response.data.data.total || 0
 }
 
 const loadCategories = async () => {
-  try {
-    const response = await merchantAPI.categories.getList()
-    categories.value = response.data.data || []
-  } catch (error) {
-    console.error('获取分类失败:', error)
-    ElMessage.error('获取分类失败')
-  }
+  const response = await merchantAPI.categories.getList({ page: 1, size: 100 })
+  categories.value = response.data.data || []
 }
 
 const handleAdd = () => {
-  dialogTitle.value = '添加商品'
-  productForm.value = {
-    id: null,
-    name: '',
-    categoryId: null,
-    brand: '',
-    price: 0,
-    stock: 0,
-    mainImage: '',
-    description: ''
-  }
+  dialogTitle.value = '发布商品'
+  productForm.value = emptyProduct()
   dialogVisible.value = true
 }
 
-const handleEdit = (product) => {
+const handleEdit = product => {
   dialogTitle.value = '编辑商品'
-  productForm.value = {
-    id: product.id,
-    name: product.name,
-    categoryId: product.categoryId,
-    brand: product.brand,
-    price: product.price,
-    stock: product.stock,
-    mainImage: product.mainImage,
-    description: product.description
-  }
+  productForm.value = { ...emptyProduct(), ...product }
   dialogVisible.value = true
 }
 
 const handleSave = async () => {
-  if (!productFormRef.value) return
-
-  try {
-    await productFormRef.value.validate()
-
-    if (productForm.value.id) {
-      await merchantAPI.products.update(productForm.value.id, productForm.value)
-      ElMessage.success('更新成功')
-    } else {
-      await merchantAPI.products.create(productForm.value)
-      ElMessage.success('添加成功')
-    }
-
-    dialogVisible.value = false
-    await loadProducts()
-  } catch (error) {
-    ElMessage.error(error.response?.data?.msg || error.message || '操作失败')
+  await productFormRef.value.validate()
+  if (productForm.value.id) {
+    await merchantAPI.products.update(productForm.value.id, productForm.value)
+    ElMessage.success('商品已更新')
+  } else {
+    await merchantAPI.products.create(productForm.value)
+    ElMessage.success('商品已发布')
   }
+  dialogVisible.value = false
+  await loadProducts()
 }
 
-const handleImageUpload = async (options) => {
-  const file = options.file
+const handleImageUpload = async options => {
   try {
-    const actualFile = file.raw || file
-    const response = await fileAPI.upload(actualFile)
-    if (response.data && response.data.data) {
-      productForm.value.mainImage = response.data.data
-      ElMessage.success('图片上传成功')
-      options.onSuccess()
-    } else {
-      ElMessage.error('上传失败：无效的响应')
-      options.onError()
-    }
+    const response = await fileAPI.upload(options.file.raw || options.file)
+    productForm.value.mainImage = response.data.data
+    ElMessage.success('图片上传成功')
+    options.onSuccess()
   } catch (error) {
-    const errorMsg = error.response?.data?.msg || error.message || '图片上传失败'
-    ElMessage.error(errorMsg)
+    ElMessage.error(error.response?.data?.msg || '图片上传失败')
     options.onError()
   }
 }
 
-const handleDelete = async (id) => {
-  try {
-    await ElMessageBox.confirm('确定要删除这个商品吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
-    await merchantAPI.products.delete(id)
-    ElMessage.success('删除成功')
-    await loadProducts()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
-    }
-  }
+const handleDelete = async id => {
+  await ElMessageBox.confirm('删除后商品将无法恢复，确定删除吗？', '删除商品', { type: 'warning' })
+  await merchantAPI.products.delete(id)
+  ElMessage.success('商品已删除')
+  await loadProducts()
 }
 
-const logout = () => {
-  localStorage.removeItem('furniture_token')
-  localStorage.removeItem('furniture_user')
-  router.push('/login')
+const copyProduct = async product => {
+  await navigator.clipboard.writeText(`${location.origin}/product/${product.id}`)
+  ElMessage.success('商品链接已复制')
 }
+
+const money = value => Number(value || 0).toFixed(2)
 </script>
 
 <style scoped>
-.merchant-products {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.navbar {
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 0;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.navbar .container {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-  height: 60px;
-}
-
-.logo a {
-  font-size: 20px;
-  font-weight: bold;
-  color: #409eff;
-  text-decoration: none;
-}
-
-.nav {
-  display: flex;
-  gap: 20px;
-}
-
-.nav-item {
-  color: #666;
-  text-decoration: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  transition: all 0.3s;
-}
-
-.nav-item:hover,
-.nav-item.router-link-active {
-  background: #409eff;
-  color: #fff;
-}
-
-.user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.welcome {
-  color: #666;
-}
-
-.btn {
-  padding: 8px 16px;
-  border: 1px solid #409eff;
-  background: #fff;
-  color: #409eff;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.btn:hover {
-  background: #409eff;
-  color: #fff;
-}
-
-.content {
-  flex: 1;
-  padding: 40px 0;
-  background: #f5f5f5;
-}
-
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
-}
-
-.page-title {
-  font-size: 28px;
-  color: #333;
-}
-
-.product-list {
+.page-tools {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
 }
 
-.product-item {
+.summary-card,
+.seller-panel {
   background: #fff;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  overflow: hidden;
+}
+
+.summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.summary-card strong {
+  font-size: 28px;
+}
+
+.seller-panel {
+  padding: 18px;
+}
+
+.panel-toolbar {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
 }
 
-.product-image {
-  width: 100%;
-  height: 200px;
-  overflow: hidden;
-  background: #f5f5f5;
-}
-
-.product-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.product-info {
-  padding: 15px;
-  flex: 1;
-}
-
-.product-name {
-  font-size: 16px;
-  font-weight: bold;
-  margin-bottom: 8px;
-  color: #333;
-}
-
-.product-brand,
-.product-price,
-.product-stock {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 4px;
-}
-
-.product-price {
-  color: #f56c6c;
-  font-size: 18px;
-  font-weight: bold;
-}
-
-.product-status {
-  margin-top: 8px;
-}
-
-.product-actions {
-  padding: 15px;
+.search-actions {
   display: flex;
   gap: 10px;
-  border-top: 1px solid #eee;
 }
 
-.pagination {
-  margin-top: 20px;
+.goods-cell {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: 12px;
 }
 
-.footer {
-  background: #fff;
-  padding: 20px 0;
-  text-align: center;
-  color: #666;
-  margin-top: auto;
+.goods-cell img,
+.preview-image {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.goods-cell strong,
+.goods-cell span {
+  display: block;
+}
+
+.goods-cell span {
+  color: #909399;
+  margin-top: 6px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.upload-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+}
+
+.preview-image {
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .page-tools,
+  .panel-toolbar,
+  .form-grid,
+  .upload-row {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .search-actions {
+    flex-wrap: wrap;
+  }
 }
 </style>

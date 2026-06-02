@@ -29,10 +29,10 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 -- 插入测试用户
 INSERT INTO `user` (`username`, `password`, `phone`, `email`, `role`) VALUES
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '13800138000', 'admin@example.com', 'ADMIN'),
-('user1', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '13800138001', 'user1@example.com', 'USER'),
-('user2', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '13800138002', 'user2@example.com', 'USER'),
-('user3', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '13800138003', 'user3@example.com', 'USER');
+('admin', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138000', 'admin@example.com', 'ADMIN'),
+('user1', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138001', 'user1@example.com', 'USER'),
+('user2', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138002', 'user2@example.com', 'USER'),
+('user3', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138003', 'user3@example.com', 'USER');
 
 -- 插入测试分类
 INSERT INTO `category` (`name`, `parent_id`, `level`, `sort_order`) VALUES

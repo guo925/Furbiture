@@ -57,6 +57,9 @@ public class AddressController {
         Long userId = AuthenticationUtil.getUserIdFromRequest(request);
         address.setUserId(userId);
         addressService.save(address);
+        if (Integer.valueOf(1).equals(address.getIsDefault())) {
+            addressService.setDefault(address.getId(), userId);
+        }
         return ResponseEntity.ok(R.ok("添加成功"));
     }
 
@@ -77,9 +80,17 @@ public class AddressController {
         }
         
         Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        Address existingAddress = addressService.getById(id);
+        if (existingAddress == null || !existingAddress.getUserId().equals(userId)) {
+            R<?> errorResponse = R.error(ResultCode.NOT_FOUND, "地址不存在");
+            return ResponseEntity.status(ResultCode.NOT_FOUND.getCode()).body(errorResponse);
+        }
         address.setId(id);
         address.setUserId(userId);
         addressService.updateById(address);
+        if (Integer.valueOf(1).equals(address.getIsDefault())) {
+            addressService.setDefault(id, userId);
+        }
         return ResponseEntity.ok(R.ok("更新成功"));
     }
 

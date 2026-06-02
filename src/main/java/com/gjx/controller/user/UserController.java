@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -23,6 +24,9 @@ public class UserController {
 
     @Autowired
     private IUserService userService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     /**
      * 获取当前用户信息
@@ -72,11 +76,11 @@ public class UserController {
         String oldPassword = passwordData.get("oldPassword");
         String newPassword = passwordData.get("newPassword");
         
-        if (!user.getPassword().equals(oldPassword)) {
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
             return R.error(ResultCode.FORBIDDEN, "原密码错误");
         }
         
-        user.setPassword(newPassword);
+        user.setPassword(passwordEncoder.encode(newPassword));
         userService.updateById(user);
         
         return R.ok("密码修改成功");

@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -58,6 +59,9 @@ public class MerchantController {
 
     @Autowired
     private IUserService userService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Autowired
     private UserDetailsService userDetailsService;
@@ -534,7 +538,7 @@ public class MerchantController {
         info.put("username", user.getUsername());
         info.put("phone", user.getPhone());
         info.put("email", user.getEmail());
-        info.put("name", user.getName());
+        info.put("name", user.getUsername());
 
         return R.ok(info);
     }
@@ -554,8 +558,10 @@ public class MerchantController {
         if (infoData.containsKey("phone")) {
             user.setPhone(infoData.get("phone"));
         }
-        if (infoData.containsKey("name")) {
-            user.setName(infoData.get("name"));
+        if (infoData.containsKey("username")) {
+            user.setUsername(infoData.get("username"));
+        } else if (infoData.containsKey("name")) {
+            user.setUsername(infoData.get("name"));
         }
 
         userService.updateById(user);
@@ -574,11 +580,11 @@ public class MerchantController {
         String oldPassword = passwordData.get("oldPassword");
         String newPassword = passwordData.get("newPassword");
 
-        if (!user.getPassword().equals(oldPassword)) {
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
             return R.error(ResultCode.FORBIDDEN, "原密码错误");
         }
 
-        user.setPassword(newPassword);
+        user.setPassword(passwordEncoder.encode(newPassword));
         userService.updateById(user);
 
         return R.ok("密码修改成功");

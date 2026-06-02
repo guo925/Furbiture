@@ -2,7 +2,7 @@
   <div class="admin-users">
     <div class="page-header">
       <h2>用户管理</h2>
-      <el-button type="primary" @click="handleAdd">添加角色</el-button>
+      <el-button type="primary" @click="handleAdd">添加用户</el-button>
     </div>
 
     <!-- 搜索和筛选 -->
@@ -90,7 +90,7 @@
 
     <!-- 重置密码对话框 -->
     <el-dialog v-model="passwordDialogVisible" title="重置密码" width="400px">
-      <el-form :model="passwordForm" ref="passwordFormRef" label-width="100px">
+      <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="100px">
         <el-form-item label="新密码" prop="password">
           <el-input v-model="passwordForm.password" type="password" show-password placeholder="请输入新密码" />
         </el-form-item>
