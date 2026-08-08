@@ -1,5 +1,7 @@
 # AI开发协作规范
 
+> **项目信息**：处理本仓库任务前，先阅读根目录 `PROJECT.md`（技术栈、结构、依赖、接口、注意事项）。本文件为协作规范。
+
 > Slash Commands: `/restart` — 重启前后端项目服务 | `Agent: gitcommit-agent` — 提交门禁
 
 ## 提交规范

@@ -2,7 +2,11 @@ import request from '../request'
 
 export const merchantAPI = {
   dashboard: {
-    getStats: () => request.get('/merchant/dashboard')
+    getStats: () => request.get('/merchant/dashboard'),
+    getRevenueTrend: () => request.get('/merchant/dashboard/revenue-trend'),
+    getCategoryDistribution: () => request.get('/merchant/dashboard/category-distribution'),
+    getOrderFunnel: () => request.get('/merchant/dashboard/order-funnel'),
+    getTopProducts: () => request.get('/merchant/dashboard/top-products')
   },
   products: {
     getList: (params) => request.get('/merchant/products', { params }),

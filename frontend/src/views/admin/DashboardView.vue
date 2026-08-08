@@ -6,7 +6,7 @@
         <div class="stat-card" style="--card-color: #667eea">
           <div class="stat-icon"><el-icon :size="28"><Document /></el-icon></div>
           <div class="stat-info">
-            <div class="stat-value">{{ stats.totalOrders }}</div>
+            <div class="stat-value">{{ stats.totalOrderCount }}</div>
             <div class="stat-label">总订单数</div>
           </div>
         </div>
@@ -15,7 +15,7 @@
         <div class="stat-card" style="--card-color: #f093fb">
           <div class="stat-icon"><el-icon :size="28"><Clock /></el-icon></div>
           <div class="stat-info">
-            <div class="stat-value">{{ stats.todayOrders }}</div>
+            <div class="stat-value">{{ stats.todayOrderCount }}</div>
             <div class="stat-label">今日订单</div>
           </div>
         </div>
@@ -104,15 +104,13 @@ const salesChartRef = ref(null)
 let chartInstance = null
 
 const stats = reactive({
-  totalOrders: 0, todayOrders: 0, totalSales: 0, todaySales: 0,
+  totalOrderCount: 0, todayOrderCount: 0, totalSales: 0, todaySales: 0,
   userCount: 0, productCount: 0
 })
 
 const hotProducts = ref([])
 
 const formatNum = (num) => (num || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 
 const loadData = async () => {
   try {
@@ -126,10 +124,10 @@ const loadData = async () => {
 const loadChart = async () => {
   try {
     const res = await adminAPI.dashboard.getSalesTrend()
-    const rawData = res.data?.data || {}
-    // API returns { date: sales } for last 7 days
-    const dates = Object.keys(rawData).sort()
-    const values = dates.map(d => rawData[d])
+    // 后端返回最近 7 天数组：[{ date: 'yyyy-MM-dd', sales, orderCount }, ...]
+    const rawData = res.data?.data || []
+    const dates = rawData.map(i => i.date.slice(5)) // 截取 MM-DD
+    const values = rawData.map(i => i.sales)
     renderChart(dates, values)
   } catch (e) { console.error('加载图表失败', e) }
 }
@@ -149,7 +147,7 @@ const renderChart = (dates, values) => {
     grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
     xAxis: {
       type: 'category',
-      data: dates.length ? dates : monthNames.slice(0, 7),
+      data: dates,
       axisLine: { lineStyle: { color: '#e2e8f0' } },
       axisLabel: { color: '#a0aec0' }
     },
@@ -160,7 +158,7 @@ const renderChart = (dates, values) => {
       axisLabel: { color: '#a0aec0' }
     },
     series: [{
-      data: values.length ? values : [3200, 4500, 3800, 5200, 6100, 4800, 5600],
+      data: values,
       type: 'line',
       smooth: true,
       symbol: 'circle',

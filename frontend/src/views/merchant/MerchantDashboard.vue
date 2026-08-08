@@ -81,7 +81,7 @@
           <div class="health-list">
             <span><i class="ok"></i> 商品可售状态正常</span>
             <span><i class="ok"></i> 店铺资料可维护</span>
-            <span><i :class="stats.pendingOrderCount ? 'warn' : 'ok'"></i> 发货待办 {{ stats.pendingOrderCount }} 单</span>
+            <span><i :class="orderFunnel.paid ? 'warn' : 'ok'"></i> 发货待办 {{ orderFunnel.paid }} 单</span>
           </div>
         </div>
       </section>
@@ -113,7 +113,7 @@
             <div class="trend-row">
               <span>订单完成</span>
               <div><i :style="{ width: completeRate + '%' }"></i></div>
-              <b>{{ stats.todayOrderCount }}</b>
+              <b>{{ orderFunnel.completed }}</b>
             </div>
             <div class="trend-row">
               <span>商品供给</span>
@@ -123,9 +123,50 @@
             <div class="trend-row">
               <span>发货压力</span>
               <div><i class="danger" :style="{ width: pendingRate + '%' }"></i></div>
-              <b>{{ stats.pendingOrderCount }}</b>
+              <b>{{ orderFunnel.paid }}</b>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="chart-grid">
+        <div class="work-panel chart-panel">
+          <div class="panel-head">
+            <div>
+              <h3>营收趋势</h3>
+              <p>近 7 天销售额走势</p>
+            </div>
+          </div>
+          <div ref="revenueChartRef" class="chart-box"></div>
+        </div>
+        <div class="work-panel chart-panel">
+          <div class="panel-head">
+            <div>
+              <h3>品类分布</h3>
+              <p>在售商品分类占比</p>
+            </div>
+          </div>
+          <div v-if="!categoryDistribution.length" class="chart-empty">
+            <el-empty description="暂无数据" :image-size="60" />
+          </div>
+          <div v-else ref="categoryChartRef" class="chart-box"></div>
+        </div>
+      </section>
+
+      <section class="work-panel hot-panel">
+        <div class="panel-head">
+          <div>
+            <h3>热销商品</h3>
+            <p>按销量排序 TOP 5</p>
+          </div>
+        </div>
+        <div class="hot-list">
+          <div v-for="(item, idx) in hotProducts.slice(0, 5)" :key="idx" class="hot-item">
+            <span class="hot-rank" :class="'rank-' + (idx + 1)">{{ idx + 1 }}</span>
+            <span class="hot-name">{{ item.name }}</span>
+            <span class="hot-count">{{ item.salesCount }} 件</span>
+          </div>
+          <el-empty v-if="!hotProducts.length" description="暂无数据" :image-size="60" />
         </div>
       </section>
     </div>
@@ -133,8 +174,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import {
   ArrowRight,
@@ -162,13 +204,47 @@ const stats = ref({
   todayOrderCount: 0
 })
 
+// 图表数据（来自后端真实统计接口）
+const revenueTrend = ref([])
+const categoryDistribution = ref([])
+const orderFunnel = ref({ pending: 0, paid: 0, delivered: 0, completed: 0 })
+const hotProducts = ref([])
+
+const revenueChartRef = ref(null)
+const categoryChartRef = ref(null)
+let revenueChart = null
+let categoryChart = null
+
 const shopName = computed(() => userStore.user?.username || '商家店铺')
 const shopInitial = computed(() => shopName.value.slice(0, 1).toUpperCase())
 const lowStockHint = computed(() => stats.value.productCount > 0 ? '巡检' : '0')
-const healthScore = computed(() => Math.max(76, stats.value.pendingOrderCount > 0 ? 88 : 96))
-const completeRate = computed(() => clamp(stats.value.todayOrderCount * 12 + 24))
-const productRate = computed(() => clamp(stats.value.productCount * 6 + 18))
-const pendingRate = computed(() => clamp(stats.value.pendingOrderCount * 18 + 8))
+
+// 订单漏斗总量（含全部有效状态）
+const funnelTotal = computed(() =>
+  orderFunnel.value.pending + orderFunnel.value.paid + orderFunnel.value.delivered + orderFunnel.value.completed)
+
+// 商品供给分：以 20 个在售商品为满分
+const productScore = computed(() => Math.min(100, Math.round(stats.value.productCount * 5)))
+
+// 店铺健康分：履约率（已发货+已完成占比）为主，商品供给为辅；无订单时仅按商品计
+const healthScore = computed(() => {
+  const total = funnelTotal.value
+  if (!total) return Math.max(40, productScore.value)
+  const fulfillment = (orderFunnel.value.delivered + orderFunnel.value.completed) / total * 100
+  return Math.round(fulfillment * 0.7 + productScore.value * 0.3)
+})
+
+// 交易概览进度条：基于真实订单漏斗的占比
+const completeRate = computed(() => {
+  const total = funnelTotal.value
+  return total ? Math.round(orderFunnel.value.completed / total * 100) : 0
+})
+// 商品供给率：归一化展示（20 个在售商品为满额）
+const productRate = computed(() => Math.min(100, Math.round(stats.value.productCount / 20 * 100)))
+const pendingRate = computed(() => {
+  const total = funnelTotal.value
+  return total ? Math.round(orderFunnel.value.paid / total * 100) : 0
+})
 
 const metrics = computed(() => [
   {
@@ -206,7 +282,7 @@ const metrics = computed(() => [
 ])
 
 const todos = computed(() => [
-  { label: '待发货订单', value: stats.value.pendingOrderCount, to: '/merchant/orders?status=1' },
+  { label: '待发货订单', value: orderFunnel.value.paid, to: '/merchant/orders?status=1' },
   { label: '库存巡检', value: lowStockHint.value, to: '/merchant/products' },
   { label: '商品发布', value: stats.value.productCount ? '继续上新' : '去发布', to: '/merchant/products' },
   { label: '资料维护', value: '1项', to: '/merchant/profile' }
@@ -221,25 +297,117 @@ const shortcuts = [
   { label: '运营设置', to: '/merchant/profile', icon: Setting }
 ]
 
-onMounted(async () => {
-  if (!userStore.isAuthenticated) {
-    router.push('/login')
-    return
-  }
-  await loadStats()
-})
-
 const loadStats = async () => {
   try {
-    const response = await merchantAPI.dashboard.getStats()
-    stats.value = response.data.data || stats.value
+    const [statsRes, trendRes, categoryRes, funnelRes, hotRes] = await Promise.all([
+      merchantAPI.dashboard.getStats(),
+      merchantAPI.dashboard.getRevenueTrend(),
+      merchantAPI.dashboard.getCategoryDistribution(),
+      merchantAPI.dashboard.getOrderFunnel(),
+      merchantAPI.dashboard.getTopProducts()
+    ])
+    stats.value = statsRes.data.data || stats.value
+    revenueTrend.value = trendRes.data.data || []
+    categoryDistribution.value = categoryRes.data.data || []
+    orderFunnel.value = funnelRes.data.data || orderFunnel.value
+    hotProducts.value = hotRes.data.data || []
+    await nextTick()
+    renderCharts()
   } catch (error) {
     ElMessage.error(error.response?.data?.msg || '获取统计数据失败')
   }
 }
 
+const renderCharts = () => {
+  renderRevenueChart()
+  renderCategoryChart()
+}
+
+const renderRevenueChart = () => {
+  if (!revenueChartRef.value) return
+  if (revenueChart) revenueChart.dispose()
+  revenueChart = echarts.init(revenueChartRef.value)
+  revenueChart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#fff',
+      borderColor: '#e8ecf3',
+      textStyle: { color: '#17202b' }
+    },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: revenueTrend.value.map(i => i.date),
+      axisLine: { lineStyle: { color: '#e8ecf3' } },
+      axisLabel: { color: '#8a94a6' }
+    },
+    yAxis: {
+      type: 'value',
+      name: '销售额 (元)',
+      splitLine: { lineStyle: { color: '#f7f9fc' } },
+      axisLabel: { color: '#8a94a6' }
+    },
+    series: [{
+      name: '销售额',
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 7,
+      data: revenueTrend.value.map(i => i.sales),
+      lineStyle: { color: '#ff7a1a', width: 3 },
+      itemStyle: { color: '#ff7a1a' },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(255, 122, 26, 0.25)' },
+          { offset: 1, color: 'rgba(255, 122, 26, 0.02)' }
+        ])
+      }
+    }]
+  })
+}
+
+const renderCategoryChart = () => {
+  if (!categoryChartRef.value) return
+  if (categoryChart) categoryChart.dispose()
+  categoryChart = echarts.init(categoryChartRef.value)
+  categoryChart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { bottom: 0, textStyle: { color: '#667085' } },
+    color: ['#ff7a1a', '#f6ad55', '#2563eb', '#16a34a', '#7c3aed', '#ef4444', '#0ea5e9', '#f59e0b'],
+    series: [{
+      type: 'pie',
+      radius: ['40%', '68%'],
+      center: ['50%', '44%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      label: { formatter: '{b}\n{c}件' },
+      labelLine: { length: 10, length2: 8 },
+      data: categoryDistribution.value.map(i => ({ name: i.name, value: i.value }))
+    }]
+  })
+}
+
+const handleResize = () => {
+  revenueChart?.resize()
+  categoryChart?.resize()
+}
+
+onMounted(async () => {
+  if (!userStore.isAuthenticated) {
+    router.push('/login')
+    return
+  }
+  window.addEventListener('resize', handleResize)
+  await loadStats()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  if (revenueChart) revenueChart.dispose()
+  if (categoryChart) categoryChart.dispose()
+})
+
 const money = value => Number(value || 0).toFixed(2)
-const clamp = value => Math.max(8, Math.min(100, value))
 </script>
 
 <style scoped>
@@ -522,6 +690,80 @@ const clamp = value => Math.max(8, Math.min(100, value))
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.62fr);
 }
 
+/* 图表区域 */
+.chart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.chart-panel .chart-box {
+  width: 100%;
+  height: 280px;
+}
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 280px;
+}
+
+/* 热销商品 */
+.hot-panel {
+  margin-top: 18px;
+}
+
+.hot-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  padding: 6px 0;
+}
+
+.hot-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 8px;
+  background: #f7f9fc;
+}
+
+.hot-rank {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: #edf1f7;
+  color: #8a94a6;
+  flex: 0 0 auto;
+}
+
+.hot-rank.rank-1 { background: #fff3cd; color: #f59e0b; }
+.hot-rank.rank-2 { background: #e2e8f0; color: #718096; }
+.hot-rank.rank-3 { background: #fed7d7; color: #e53e3e; }
+
+.hot-name {
+  flex: 1;
+  font-size: 13px;
+  color: #344054;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hot-count {
+  font-size: 12px;
+  color: #ff7a1a;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
 .shortcut-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -590,11 +832,16 @@ const clamp = value => Math.max(8, Math.min(100, value))
 @media (max-width: 1160px) {
   .overview-panel,
   .dashboard-columns,
-  .bottom-columns {
+  .bottom-columns,
+  .chart-grid {
     grid-template-columns: 1fr;
   }
 
   .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hot-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -610,7 +857,8 @@ const clamp = value => Math.max(8, Math.min(100, value))
 
   .metric-grid,
   .todo-list,
-  .shortcut-grid {
+  .shortcut-grid,
+  .hot-list {
     grid-template-columns: 1fr;
   }
 }
