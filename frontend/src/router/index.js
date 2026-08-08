@@ -64,6 +64,12 @@ const router = createRouter({
       meta: { title: '地址管理', requiresAuth: true }
     },
     {
+      path: '/favorites',
+      name: 'Favorites',
+      component: () => import('../views/user/FavoritesView.vue'),
+      meta: { title: '我的收藏', requiresAuth: true }
+    },
+    {
       path: '/login',
       name: 'Login',
       component: () => import('../views/user/LoginView.vue'),
@@ -123,33 +129,40 @@ const router = createRouter({
     // 商家管理端路由
     {
       path: '/merchant',
-      name: 'Merchant',
-      component: () => import('../views/merchant/MerchantDashboard.vue'),
-      meta: { title: '商家中心', requiresAuth: true, requiresMerchant: true }
-    },
-    {
-      path: '/merchant/products',
-      name: 'MerchantProducts',
-      component: () => import('../views/merchant/MerchantProducts.vue'),
-      meta: { title: '商品管理', requiresAuth: true, requiresMerchant: true }
-    },
-    {
-      path: '/merchant/orders',
-      name: 'MerchantOrders',
-      component: () => import('../views/merchant/MerchantOrders.vue'),
-      meta: { title: '订单管理', requiresAuth: true, requiresMerchant: true }
-    },
-    {
-      path: '/merchant/categories',
-      name: 'MerchantCategories',
-      component: () => import('../views/merchant/MerchantCategories.vue'),
-      meta: { title: '商品分类', requiresAuth: true, requiresMerchant: true }
-    },
-    {
-      path: '/merchant/profile',
-      name: 'MerchantProfile',
-      component: () => import('../views/merchant/MerchantProfile.vue'),
-      meta: { title: '个人中心', requiresAuth: true, requiresMerchant: true }
+      component: () => import('../components/MerchantLayout.vue'),
+      meta: { requiresAuth: true, requiresMerchant: true, title: '商家中心' },
+      children: [
+        {
+          path: '',
+          name: 'MerchantDashboard',
+          component: () => import('../views/merchant/MerchantDashboard.vue'),
+          meta: { title: '经营工作台' }
+        },
+        {
+          path: 'products',
+          name: 'MerchantProducts',
+          component: () => import('../views/merchant/MerchantProducts.vue'),
+          meta: { title: '商品管理' }
+        },
+        {
+          path: 'orders',
+          name: 'MerchantOrders',
+          component: () => import('../views/merchant/MerchantOrders.vue'),
+          meta: { title: '订单管理' }
+        },
+        {
+          path: 'categories',
+          name: 'MerchantCategories',
+          component: () => import('../views/merchant/MerchantCategories.vue'),
+          meta: { title: '分类管理' }
+        },
+        {
+          path: 'profile',
+          name: 'MerchantProfile',
+          component: () => import('../views/merchant/MerchantProfile.vue'),
+          meta: { title: '店铺资料' }
+        }
+      ]
     }
   ]
 })

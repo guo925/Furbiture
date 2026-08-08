@@ -2,7 +2,9 @@ package com.gjx.controller;
 
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
+import com.gjx.common.BusinessException;
 import com.gjx.common.R;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,6 +18,7 @@ import java.util.UUID;
 /**
  * 文件上传控制器
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/files")
 public class FileController {
@@ -57,8 +60,8 @@ public class FileController {
 
             return uploadToLocal(file, fileName);
         } catch (Exception e) {
-            e.printStackTrace();
-            return R.error("文件上传失败: " + e.getMessage());
+            log.error("[文件上传失败] fileName={}, error={}", file.getOriginalFilename(), e.getMessage(), e);
+            throw new BusinessException("文件上传失败: " + e.getMessage());
         }
     }
 

@@ -1,5 +1,5 @@
 <template>
-  <MerchantLayout title="店铺资料" subtitle="维护店铺账号、联系方式和登录安全">
+  <div>
   <div class="merchant-profile">
     <div class="page-header">
       <h2>个人中心</h2>
@@ -45,14 +45,13 @@
       </div>
     </div>
   </div>
-  </MerchantLayout>
+  </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { merchantAPI } from '../../api'
 import { ElMessage } from 'element-plus'
-import MerchantLayout from '../../components/MerchantLayout.vue'
 
 const formRef = ref(null)
 const passwordFormRef = ref(null)

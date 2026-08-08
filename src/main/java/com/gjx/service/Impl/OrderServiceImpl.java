@@ -5,8 +5,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.gjx.common.BusinessException;
 import com.gjx.entity.*;
+import com.gjx.enums.OrderStatusEnum;
 import com.gjx.mapper.*;
 import com.gjx.service.IOrderService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements IOrderService {
 
@@ -67,10 +70,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setUserId(userId);
         order.setAddressId(addressId);
         order.setTotalAmount(total);
-        order.setStatus(0);
+        order.setStatus(OrderStatusEnum.PENDING_PAYMENT.getCode());
         save(order);
+        log.info("[创建订单] orderNo={}, userId={}, amount={}", order.getOrderNo(), userId, total);
 
-        // 6. 保存订单明细
+        // 6. 保存订单明细（复用步骤3中已查询的商品信息）
         for (Cart item : cartItems) {
             Product product = productMapper.selectById(item.getProductId());
             OrderItem orderItem = new OrderItem();
@@ -94,8 +98,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     public void mockPay(String orderNo) {
         Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
         if (order == null) throw new BusinessException("订单不存在");
-        if (order.getStatus() != 0) throw new BusinessException("订单状态不正确");
-        order.setStatus(1);
+        if (!order.getStatus().equals(OrderStatusEnum.PENDING_PAYMENT.getCode())) throw new BusinessException("订单状态不正确");
+        order.setStatus(OrderStatusEnum.PAID.getCode());
         order.setPayTime(LocalDateTime.now());
         updateById(order);
     }
@@ -105,8 +109,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     public void cancelOrder(String orderNo) {
         Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
         if (order == null) throw new BusinessException("订单不存在");
-        if (order.getStatus() != 0) throw new BusinessException("只有待付款订单可以取消");
-        order.setStatus(4);
+        if (!order.getStatus().equals(OrderStatusEnum.PENDING_PAYMENT.getCode())) throw new BusinessException("只有待付款订单可以取消");
+        order.setStatus(OrderStatusEnum.CANCELLED.getCode());
         order.setCancelTime(LocalDateTime.now());
         updateById(order);
 
@@ -122,8 +126,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     public void deliverOrder(String orderNo) {
         Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
         if (order == null) throw new BusinessException("订单不存在");
-        if (order.getStatus() != 1) throw new BusinessException("只有已付款订单可以发货");
-        order.setStatus(2);
+        if (!order.getStatus().equals(OrderStatusEnum.PAID.getCode())) throw new BusinessException("只有已付款订单可以发货");
+        order.setStatus(OrderStatusEnum.DELIVERED.getCode());
         order.setDeliveryTime(LocalDateTime.now());
         updateById(order);
     }
@@ -133,8 +137,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     public void confirmReceive(String orderNo) {
         Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
         if (order == null) throw new BusinessException("订单不存在");
-        if (order.getStatus() != 2) throw new BusinessException("只有已发货订单可以确认收货");
-        order.setStatus(3);
+        if (!order.getStatus().equals(OrderStatusEnum.DELIVERED.getCode())) throw new BusinessException("只有已发货订单可以确认收货");
+        order.setStatus(OrderStatusEnum.COMPLETED.getCode());
         order.setFinishTime(LocalDateTime.now());
         updateById(order);
     }
@@ -186,32 +190,16 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public int countTodayOrders() {
-        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
-        LocalDateTime todayEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59).withNano(999999999);
-        
-        LambdaQueryWrapper<Order> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.ge(Order::getCreateTime, todayStart)
-                .le(Order::getCreateTime, todayEnd);
-        
-        return (int) count(queryWrapper);
+        return baseMapper.countTodayOrders();
     }
 
     @Override
     public double getTodaySales() {
-        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
-        LocalDateTime todayEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59).withNano(999999999);
-        
-        LambdaQueryWrapper<Order> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.ge(Order::getPayTime, todayStart)
-                .le(Order::getPayTime, todayEnd)
-                .eq(Order::getStatus, 1); // 已付款状态
-        
-        List<Order> orders = list(queryWrapper);
-        double totalSales = 0;
-        for (Order order : orders) {
-            totalSales += order.getTotalAmount().doubleValue();
-        }
-        return totalSales;
+        String today = LocalDate.now().toString();
+        String tomorrow = LocalDate.now().plusDays(1).toString();
+        BigDecimal sales = baseMapper.selectTotalSalesByDateAndStatus(
+                today, tomorrow, OrderStatusEnum.PAID.getCode());
+        return sales != null ? sales.doubleValue() : 0;
     }
 
     @Override
@@ -221,96 +209,27 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public double getTotalSales() {
-        LambdaQueryWrapper<Order> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Order::getStatus, 1); // 已付款状态
-        
-        List<Order> orders = list(queryWrapper);
-        double totalSales = 0;
-        for (Order order : orders) {
-            totalSales += order.getTotalAmount().doubleValue();
-        }
-        return totalSales;
+        BigDecimal sales = baseMapper.selectTotalSalesByStatus(OrderStatusEnum.PAID.getCode());
+        return sales != null ? sales.doubleValue() : 0;
     }
-    
+
     @Override
     public double getSalesByDate(String date) {
-        LocalDateTime startDate = LocalDate.parse(date).atStartOfDay();
-        LocalDateTime endDate = startDate.plusDays(1).minusNanos(1);
-        
-        LambdaQueryWrapper<Order> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.ge(Order::getPayTime, startDate)
-                .le(Order::getPayTime, endDate)
-                .eq(Order::getStatus, 1); // 已付款状态
-        
-        List<Order> orders = list(queryWrapper);
-        double totalSales = 0;
-        for (Order order : orders) {
-            totalSales += order.getTotalAmount().doubleValue();
-        }
-        return totalSales;
+        String nextDay = LocalDate.parse(date).plusDays(1).toString();
+        BigDecimal sales = baseMapper.selectTotalSalesByDateAndStatus(
+                date, nextDay, OrderStatusEnum.PAID.getCode());
+        return sales != null ? sales.doubleValue() : 0;
     }
-    
+
     @Override
     public int countOrdersByDate(String date) {
-        LocalDateTime startDate = LocalDate.parse(date).atStartOfDay();
-        LocalDateTime endDate = startDate.plusDays(1).minusNanos(1);
-        
-        LambdaQueryWrapper<Order> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.ge(Order::getCreateTime, startDate)
-                .le(Order::getCreateTime, endDate);
-        
-        return (int) count(queryWrapper);
+        String nextDay = LocalDate.parse(date).plusDays(1).toString();
+        return baseMapper.countOrdersByDate(date, nextDay);
     }
-    
+
     @Override
     public List<Map<String, Object>> getHotProducts(int limit) {
-        // 直接从订单详情表中获取所有数据
-        List<OrderItem> orderItems = orderItemMapper.selectList(null);
-        
-        // 统计每个商品的销售数量
-        Map<Long, Integer> productSalesCount = new HashMap<>();
-        Map<Long, String> productNames = new HashMap<>();
-        Map<Long, BigDecimal> productPrices = new HashMap<>();
-        
-        for (OrderItem item : orderItems) {
-            Long productId = item.getProductId();
-            int quantity = item.getQuantity();
-            
-            // 累加销售数量
-            productSalesCount.put(productId, productSalesCount.getOrDefault(productId, 0) + quantity);
-            
-            // 保存商品名称和价格
-            productNames.put(productId, item.getProductName());
-            productPrices.put(productId, item.getPrice());
-        }
-        
-        // 转换为热门商品列表
-        List<Map<String, Object>> hotProducts = new ArrayList<>();
-        for (Map.Entry<Long, Integer> entry : productSalesCount.entrySet()) {
-            Long productId = entry.getKey();
-            Integer salesCount = entry.getValue();
-            
-            Map<String, Object> product = new HashMap<>();
-            product.put("id", productId);
-            product.put("name", productNames.get(productId));
-            product.put("salesCount", salesCount);
-            product.put("price", productPrices.get(productId).doubleValue());
-            
-            hotProducts.add(product);
-        }
-        
-        // 按销售数量从大到小排序
-        hotProducts.sort((a, b) -> {
-            int salesCountA = (int) a.get("salesCount");
-            int salesCountB = (int) b.get("salesCount");
-            return Integer.compare(salesCountB, salesCountA);
-        });
-        
-        // 限制返回数量
-        if (hotProducts.size() > limit) {
-            hotProducts = hotProducts.subList(0, limit);
-        }
-        
-        return hotProducts;
+        // 使用 SQL GROUP BY 聚合替代全量加载到内存
+        return orderItemMapper.getHotProducts(limit);
     }
 }

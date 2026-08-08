@@ -1,39 +1,37 @@
 package com.gjx.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
+import java.util.Arrays;
+import java.util.List;
+
 /**
- * CORS跨域配置
+ * 全局 CORS 跨域配置
+ * 仅允许配置的白名单来源，不再使用 allowAll
  */
 @Configuration
 public class CorsConfig {
 
+    @Value("${cors.allowed-origins:http://localhost:3002,http://localhost:3003,http://localhost:3004}")
+    private String allowedOrigins;
+
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
-        
-        // 允许所有来源
-        config.addAllowedOriginPattern("*");
-        
-        // 允许所有请求头
-        config.addAllowedHeader("*");
-        
-        // 允许所有HTTP方法
-        config.addAllowedMethod("*");
-        
-        // 允许携带凭证
+        List<String> origins = Arrays.asList(allowedOrigins.split(","));
+        config.setAllowedOriginPatterns(origins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
-        
-        // 预检请求的有效期（秒）
         config.setMaxAge(3600L);
-        
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
-        
         return new CorsFilter(source);
     }
 }

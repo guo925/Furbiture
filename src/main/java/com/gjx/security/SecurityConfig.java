@@ -1,5 +1,6 @@
 package com.gjx.security;
 
+import com.gjx.enums.UserRoleEnum;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -40,14 +41,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(request -> {
-                    var corsConfig = new org.springframework.web.cors.CorsConfiguration();
-                    corsConfig.setAllowedOrigins(java.util.List.of("http://localhost:3002", "http://localhost:3003", "http://localhost:3004"));
-                    corsConfig.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-                    corsConfig.setAllowedHeaders(java.util.List.of("*"));
-                    corsConfig.setAllowCredentials(true);
-                    return corsConfig;
-                }))
+                .cors(cors -> {}) // CORS 由 CorsConfig.java 中的 CorsFilter Bean 统一管理
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -56,6 +50,7 @@ public class SecurityConfig {
                                 "/error",
                                 "/favicon.ico",
                                 "/api/auth/**",
+                                "/api/admin/auth/login",
                                 "/api/products/**",
                                 "/api/categories/**",
                                 "/api/files/**",
@@ -66,8 +61,8 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
-                        .requestMatchers("/api/merchant/**").hasAuthority("MERCHANT")
+                        .requestMatchers("/api/admin/**").hasAuthority(UserRoleEnum.ADMIN.getCode())
+                        .requestMatchers("/api/merchant/**").hasAuthority(UserRoleEnum.MERCHANT.getCode())
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()
                 )

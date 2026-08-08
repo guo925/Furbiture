@@ -14,4 +14,9 @@ public interface ICategoryService extends IService<Category> {
      * @return 分类树列表
      */
     List<Category> getCategoryTree();
+
+    /**
+     * 清除分类树缓存（增删改分类后自动调用）
+     */
+    void evictCategoryTreeCache();
 }

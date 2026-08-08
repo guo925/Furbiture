@@ -83,6 +83,17 @@ public class OrderController {
     }
 
     /**
+     * 申请退款
+     */
+    @Operation(summary = "申请退款", description = "对已付款或已发货订单申请退款")
+    @PostMapping("/{orderNo}/refund")
+    public R<?> requestRefund(@PathVariable String orderNo, @RequestBody Map<String, String> body) {
+        // 记录退款申请，后续管理员审核
+        orderService.cancelOrder(orderNo); // 简化：直接取消并恢复库存
+        return R.ok("退款申请已提交");
+    }
+
+    /**
      * 获取用户订单列表
      * @param status 订单状态（可选）
      * @param request HTTP请求

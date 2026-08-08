@@ -97,4 +97,20 @@ public class ProductController {
         Page<Product> productPage = productService.searchProducts(keyword, page, size);
         return R.ok(productPage);
     }
+
+    /**
+     * 搜索建议（自动补全）
+     * @param keyword 搜索关键词
+     * @return 最多5条匹配建议
+     */
+    @Operation(summary = "搜索建议", description = "根据关键词返回自动补全建议")
+    @GetMapping("/suggestions")
+    public R<List<String>> suggestions(@RequestParam String keyword) {
+        Page<Product> products = productService.searchProducts(keyword, 1, 5);
+        List<String> names = products.getRecords().stream()
+                .map(Product::getName)
+                .limit(5)
+                .collect(java.util.stream.Collectors.toList());
+        return R.ok(names);
+    }
 }

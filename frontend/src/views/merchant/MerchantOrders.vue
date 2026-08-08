@@ -1,5 +1,5 @@
 <template>
-  <MerchantLayout title="订单管理" subtitle="查看交易订单、处理发货和跟踪售后状态">
+  <div>
     <section class="seller-panel">
       <div class="panel-toolbar">
         <el-tabs v-model="statusFilter" @tab-change="loadOrders">
@@ -80,14 +80,13 @@
         <el-button v-if="currentOrder.status === 1" type="primary" @click="handleShip(currentOrder.orderNo)">确认发货</el-button>
       </div>
     </el-drawer>
-  </MerchantLayout>
+  </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import MerchantLayout from '../../components/MerchantLayout.vue'
 import { merchantAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
 

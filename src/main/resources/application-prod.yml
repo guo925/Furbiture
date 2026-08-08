@@ -1,0 +1,50 @@
+# ============================================================
+# 生产环境配置模板
+# 说明：生产环境敏感信息应通过环境变量或外部配置中心注入
+# ============================================================
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/furniture_db?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 16
+          min-idle: 4
+          max-wait: 3000ms
+
+# JWT 配置（生产环境必须修改密钥）
+jwt:
+  secret: ${JWT_SECRET:}
+  expiration: 7200000  # 2小时
+
+# 文件上传配置
+file:
+  upload-dir: ${UPLOAD_DIR:/data/furniture-uploads/}
+
+# 阿里云 OSS 配置
+oss:
+  endpoint: ${OSS_ENDPOINT:}
+  bucket-name: ${OSS_BUCKET_NAME:}
+  access-key-id: ${OSS_ACCESS_KEY_ID:}
+  access-key-secret: ${OSS_ACCESS_KEY_SECRET:}
+
+# 日志级别
+logging:
+  level:
+    com.gjx: info
+    org.springframework.security: warn
+  file:
+    path: /var/log/furbiture
+    name: furbiture.log

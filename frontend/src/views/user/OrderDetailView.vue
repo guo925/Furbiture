@@ -1,138 +1,133 @@
 <template>
-  <div class="order-detail">
-    <!-- 导航栏 -->
-    <header class="navbar">
-      <div class="container">
-        <div class="logo">
-          <router-link to="/">家具商城</router-link>
-        </div>
-        <nav class="nav">
-          <router-link to="/home" class="nav-item">首页</router-link>
-          <router-link to="/products" class="nav-item">商品列表</router-link>
-          <router-link to="/cart" class="nav-item">
-            购物车
-            <span v-if="cartStore.totalQuantity > 0" class="cart-badge">{{ cartStore.totalQuantity }}</span>
-          </router-link>
-        </nav>
-        <div class="user">
-          <template v-if="userStore.isAuthenticated">
-            <span class="welcome">欢迎, {{ userStore.user.username }}</span>
-            <router-link to="/profile" class="nav-item">个人中心</router-link>
-            <router-link to="/orders" class="nav-item">我的订单</router-link>
-            <button @click="logout" class="btn">退出</button>
-          </template>
-          <template v-else>
-            <router-link to="/login" class="btn">登录</router-link>
-            <router-link to="/register" class="btn btn-primary">注册</router-link>
-          </template>
+  <UserLayout>
+    <div class="shop-container order-detail-page">
+      <div class="page-head">
+        <h1>订单详情</h1>
+        <el-button @click="goBack" text>← 返回订单列表</el-button>
+      </div>
+
+      <el-skeleton v-if="loading" :rows="8" animated />
+
+      <div v-else-if="orderDetail" class="detail-grid">
+        <!-- 订单基本信息 -->
+        <section class="panel">
+          <h2>订单信息</h2>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="订单号">{{ orderDetail.orderNumber }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag :type="statusMeta.type">{{ statusMeta.text }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="总金额">
+              <span class="price">¥{{ orderDetail.totalPrice }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="下单时间">{{ orderDetail.createTime }}</el-descriptions-item>
+            <el-descriptions-item v-if="orderDetail.payTime" label="付款时间">{{ orderDetail.payTime }}</el-descriptions-item>
+            <el-descriptions-item v-if="orderDetail.deliveryTime" label="发货时间">{{ orderDetail.deliveryTime }}</el-descriptions-item>
+          </el-descriptions>
+        </section>
+
+        <!-- 物流时间线 -->
+        <section v-if="logisticsEvents.length" class="panel">
+          <h2>物流追踪</h2>
+          <el-timeline>
+            <el-timeline-item
+              v-for="event in logisticsEvents"
+              :key="event.time"
+              :timestamp="event.time"
+              :type="event.type"
+              :icon="event.icon"
+            >
+              {{ event.text }}
+            </el-timeline-item>
+          </el-timeline>
+        </section>
+
+        <!-- 收货地址 -->
+        <section v-if="address" class="panel">
+          <h2>收货信息</h2>
+          <div class="address-card">
+            <strong>{{ address.receiver }} {{ address.phone }}</strong>
+            <span>{{ address.province }}{{ address.city }}{{ address.district }}{{ address.detail }}</span>
+          </div>
+        </section>
+
+        <!-- 商品明细 -->
+        <section class="panel">
+          <h2>商品明细</h2>
+          <div v-for="item in orderItems" :key="item.id" class="goods-row">
+            <img :src="item.productImage || fallbackImage" :alt="item.productName">
+            <div class="goods-info">
+              <router-link :to="`/product/${item.productId}`">{{ item.productName }}</router-link>
+              <span>¥{{ item.price }} × {{ item.quantity }}</span>
+            </div>
+            <strong>¥{{ item.totalPrice }}</strong>
+          </div>
+        </section>
+
+        <!-- 操作按钮 -->
+        <div class="action-bar">
+          <el-button @click="goBack">返回订单列表</el-button>
+          <el-button v-if="canCancel" type="danger" @click="cancelOrder">取消订单</el-button>
+          <el-button v-if="canPay" type="success" @click="payOrder">去支付</el-button>
+          <el-button v-if="canConfirm" type="primary" @click="confirmReceipt">确认收货</el-button>
         </div>
       </div>
-    </header>
 
-    <!-- 订单详情 -->
-    <div class="order-detail-section">
-      <div class="container">
-        <h2 class="page-title">订单详情</h2>
-        
-        <div v-if="loading" class="loading">
-          <el-loading v-model="loading" text="加载中..." />
-        </div>
-        
-        <div v-else-if="orderDetail" class="order-detail-content">
-          <!-- 订单基本信息 -->
-          <div class="order-info">
-            <h3>订单信息</h3>
-            <div class="info-item">
-              <span class="label">订单号：</span>
-              <span class="value">{{ orderDetail.orderNumber }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">订单状态：</span>
-              <span :class="['status', orderDetail.status]">{{ getStatusText(orderDetail.status) }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">总金额：</span>
-              <span class="value total">¥{{ orderDetail.totalPrice }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">创建时间：</span>
-              <span class="value">{{ orderDetail.createTime }}</span>
-            </div>
-          </div>
-          
-          <!-- 收货地址 -->
-          <div class="address-info" v-if="address">
-            <h3>收货信息</h3>
-            <div class="info-item">
-              <span class="label">收货人：</span>
-              <span class="value">{{ address.receiver }} {{ address.phone }}</span>
-            </div>
-            <div class="info-item">
-              <span class="label">收货地址：</span>
-              <span class="value">{{ address.province }}{{ address.city }}{{ address.district }}{{ address.detail }}</span>
-            </div>
-          </div>
-          
-          <!-- 商品信息 -->
-          <div class="product-info">
-            <h3>商品信息</h3>
-            <div class="product-list">
-              <div v-for="item in orderItems" :key="item.id" class="product-item">
-                <img :src="item.productImage" :alt="item.productName" class="product-image">
-                <div class="product-details">
-                  <span class="product-name">{{ item.productName }}</span>
-                  <div class="product-price">
-                    <span>¥{{ item.price }}</span>
-                    <span>x{{ item.quantity }}</span>
-                    <span class="subtotal">¥{{ item.totalPrice }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <!-- 操作按钮 -->
-          <div class="order-actions">
-            <el-button @click="goBack">返回订单列表</el-button>
-            <el-button v-if="orderDetail.status === 'PENDING'" type="primary" @click="cancelOrder">取消订单</el-button>
-            <el-button v-if="orderDetail.status === 'PENDING'" type="success" @click="payOrder">去支付</el-button>
-            <el-button v-if="orderDetail.status === 'DELIVERED'" type="primary" @click="confirmReceipt">确认收货</el-button>
-          </div>
-        </div>
-        
-        <div v-else class="error">
-          <el-empty description="订单不存在" />
-          <el-button @click="goBack">返回订单列表</el-button>
-        </div>
+      <div v-else class="empty">
+        <el-empty description="订单不存在" />
+        <el-button @click="goBack">返回订单列表</el-button>
       </div>
     </div>
-
-    <!-- 页脚 -->
-    <footer class="footer">
-      <div class="container">
-        <p>&copy; 2026 家具商城. 保留所有权利.</p>
-      </div>
-    </footer>
-  </div>
+  </UserLayout>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../../stores/user'
-import { useCartStore } from '../../stores/cart'
 import { orderAPI, addressAPI } from '../../api'
-import { ElMessage, ElLoading } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { Clock, Van, Check } from '@element-plus/icons-vue'
+import UserLayout from '../../components/UserLayout.vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const cartStore = useCartStore()
 
 const loading = ref(true)
 const orderDetail = ref(null)
 const orderItems = ref([])
 const address = ref(null)
+const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
+
+const statusMap = {
+  0: { text: '待付款', type: 'warning' },
+  1: { text: '已付款', type: 'primary' },
+  2: { text: '已发货', type: 'success' },
+  3: { text: '已完成', type: 'info' },
+  4: { text: '已取消', type: 'info' },
+  5: { text: '已退款', type: 'danger' }
+}
+
+const statusMeta = computed(() => {
+  const status = orderDetail.value?.status
+  return statusMap[status] || { text: '未知', type: 'info' }
+})
+
+const canCancel = computed(() => orderDetail.value?.status === 0)
+const canPay = computed(() => orderDetail.value?.status === 0)
+const canConfirm = computed(() => orderDetail.value?.status === 2)
+
+const logisticsEvents = computed(() => {
+  if (!orderDetail.value) return []
+  const events = []
+  const order = orderDetail.value
+  events.push({ time: order.createTime, text: '订单已提交', type: 'primary', icon: Clock })
+  if (order.payTime) events.push({ time: order.payTime, text: '买家已付款', type: 'success', icon: Check })
+  if (order.deliveryTime) events.push({ time: order.deliveryTime, text: '商家已发货，运输中', type: 'warning', icon: Van })
+  if (order.finishTime) events.push({ time: order.finishTime, text: '订单已完成', type: 'success', icon: Check })
+  return events
+})
 
 onMounted(async () => {
   if (!userStore.isAuthenticated) {
@@ -140,47 +135,39 @@ onMounted(async () => {
     return
   }
   await loadOrderDetail()
-  await cartStore.getCartList()
 })
 
 const loadOrderDetail = async () => {
+  loading.value = true
   try {
-    loading.value = true
     const orderNo = route.params.id
     const response = await orderAPI.getDetail(orderNo)
-      const data = response.data.data
-      
-      // 转换订单数据格式
-      orderDetail.value = {
-        id: data.order.id,
-        orderNumber: data.order.orderNo,
-        status: data.order.status === 0 ? 'PENDING' : 
-                data.order.status === 1 ? 'PAID' : 
-                data.order.status === 2 ? 'DELIVERED' : 
-                data.order.status === 3 ? 'COMPLETED' : 
-                data.order.status === 4 ? 'CANCELLED' : 'REFUNDED',
-        totalPrice: data.order.totalAmount,
-        createTime: data.order.createTime,
-        payTime: data.order.payTime,
-        deliveryTime: data.order.deliveryTime,
-        finishTime: data.order.finishTime
-      }
-      
-      // 转换商品数据
-      orderItems.value = (data.items || []).map(item => ({
-        id: item.id,
-        productId: item.productId,
-        productName: item.productName,
-        productImage: item.productImage || '',
-        quantity: item.quantity,
-        price: item.price,
-        totalPrice: item.totalPrice || Number(item.price || 0) * Number(item.quantity || 0)
-      }))
-      
-      // 获取地址信息
-      if (data.order.addressId) {
-        await loadAddress(data.order.addressId)
-      }
+    const data = response.data.data
+
+    orderDetail.value = {
+      id: data.order.id,
+      orderNumber: data.order.orderNo,
+      status: data.order.status,
+      totalPrice: data.order.totalAmount,
+      createTime: data.order.createTime,
+      payTime: data.order.payTime,
+      deliveryTime: data.order.deliveryTime,
+      finishTime: data.order.finishTime
+    }
+
+    orderItems.value = (data.items || []).map(item => ({
+      id: item.id,
+      productId: item.productId,
+      productName: item.productName,
+      productImage: item.productImage || '',
+      quantity: item.quantity,
+      price: item.price,
+      totalPrice: item.totalPrice || (Number(item.price || 0) * Number(item.quantity || 0)).toFixed(2)
+    }))
+
+    if (data.order.addressId) {
+      await loadAddress(data.order.addressId)
+    }
   } catch (error) {
     console.error('获取订单详情失败:', error)
     ElMessage.error('获取订单详情失败')
@@ -204,26 +191,10 @@ const loadAddress = async (addressId) => {
         detail: addr.detailAddress
       }
     }
-  } catch (error) {
-    console.error('获取地址失败:', error)
-  }
+  } catch (error) { /* ignore */ }
 }
 
-const getStatusText = (status) => {
-  const statusMap = {
-    'PENDING': '待支付',
-    'PAID': '已支付',
-    'DELIVERED': '已发货',
-    'COMPLETED': '已完成',
-    'CANCELLED': '已取消',
-    'REFUNDED': '已退款'
-  }
-  return statusMap[status] || status
-}
-
-const goBack = () => {
-  router.push('/orders')
-}
+const goBack = () => router.push('/orders')
 
 const cancelOrder = async () => {
   try {
@@ -254,277 +225,89 @@ const confirmReceipt = async () => {
     ElMessage.error(error.message || '确认收货失败')
   }
 }
-
-const logout = () => {
-  userStore.logout()
-  ElMessage.success('退出成功')
-  router.push('/home')
-}
 </script>
 
 <style scoped>
-.order-detail {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.navbar {
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.container {
-  max-width: 1200px;
+.shop-container {
+  width: min(1200px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 0 20px;
 }
 
-.navbar .container {
+.order-detail-page {
+  padding: 28px 0;
+}
+
+.page-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 60px;
+  margin-bottom: 22px;
 }
 
-.logo a {
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
-  text-decoration: none;
-}
+.page-head h1 { font-size: 28px; margin: 0; }
 
-.nav {
-  display: flex;
-  gap: 30px;
-}
+.detail-grid { display: grid; gap: 18px; }
 
-.nav-item {
-  color: #666;
-  text-decoration: none;
-  font-size: 16px;
-  transition: color 0.3s;
-}
-
-.nav-item:hover,
-.nav-item.active {
-  color: #409eff;
-}
-
-.user {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.welcome {
-  color: #666;
-}
-
-.btn {
-  padding: 6px 16px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  background: #fff;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.3s;
-  text-decoration: none;
-}
-
-.btn:hover {
-  border-color: #409eff;
-  color: #409eff;
-}
-
-.btn-primary {
-  background: #409eff;
-  color: #fff;
-  border-color: #409eff;
-}
-
-.btn-primary:hover {
-  background: #66b1ff;
-  border-color: #66b1ff;
-  color: #fff;
-}
-
-.cart-badge {
-  background: #f56c6c;
-  color: #fff;
-  border-radius: 50%;
-  font-size: 12px;
-  padding: 2px 6px;
-  margin-left: 5px;
-}
-
-.order-detail-section {
-  flex: 1;
-  padding: 40px 0;
-}
-
-.page-title {
-  margin-bottom: 30px;
-  color: #333;
-  font-size: 24px;
-  font-weight: bold;
-}
-
-.order-detail-content {
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+.panel {
+  background: var(--color-bg-card, #fff);
+  border: 1px solid var(--color-border-light, #f0f0f0);
+  border-radius: var(--radius-md);
   padding: 20px;
 }
 
-.order-info,
-.address-info,
-.product-info {
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid #f0f0f0;
-}
+.panel h2 { font-size: 18px; margin: 0 0 16px; }
 
-.order-info h3,
-.address-info h3,
-.product-info h3 {
-  margin-bottom: 20px;
-  color: #333;
-  font-size: 18px;
-  font-weight: bold;
-}
+.price { color: var(--color-primary); font-weight: 700; font-size: 18px; }
 
-.info-item {
-  margin-bottom: 10px;
-  display: flex;
+.address-card { display: grid; gap: 8px; }
+.address-card span { color: var(--color-text-secondary); }
+
+.goods-row {
+  display: grid;
+  grid-template-columns: 68px 1fr auto;
   align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border-light, #f0f0f0);
 }
 
-.info-item .label {
-  width: 100px;
-  color: #666;
-}
+.goods-row:first-child { border-top: 0; }
 
-.info-item .value {
-  color: #333;
-  flex: 1;
-}
-
-.info-item .value.total {
-  color: #ff4d4f;
-  font-weight: bold;
-  font-size: 18px;
-}
-
-.info-item .status {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: bold;
-}
-
-.status.PENDING {
-  background: #fff2e8;
-  color: #fa8c16;
-}
-
-.status.PAID {
-  background: #e6f7ff;
-  color: #1890ff;
-}
-
-.status.DELIVERED {
-  background: #f6ffed;
-  color: #52c41a;
-}
-
-.status.COMPLETED {
-  background: #f0f0f0;
-  color: #666;
-}
-
-.status.CANCELLED {
-  background: #fff2f0;
-  color: #ff4d4f;
-}
-
-.status.REFUNDED {
-  background: #fff1f0;
-  color: #ff4d4f;
-}
-
-.product-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.product-item {
-  display: flex;
-  align-items: center;
-  padding: 15px;
-  border: 1px solid #f0f0f0;
-  border-radius: 8px;
-}
-
-.product-image {
-  width: 80px;
-  height: 80px;
+.goods-row img {
+  width: 68px; height: 68px;
   object-fit: cover;
-  border-radius: 4px;
-  margin-right: 15px;
+  border-radius: var(--radius-sm);
+  background: #f3f3f3;
 }
 
-.product-details {
-  flex: 1;
-}
-
-.product-name {
+.goods-info a {
   display: block;
-  margin-bottom: 10px;
-  color: #333;
-  font-size: 16px;
+  color: var(--color-text-primary);
+  text-decoration: none;
+  font-weight: 600;
 }
+.goods-info a:hover { color: var(--color-primary); }
+.goods-info span { display: block; margin-top: 6px; color: var(--color-text-muted); font-size: 13px; }
 
-.product-price {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
+.goods-row strong { color: var(--color-primary); }
 
-.product-price span {
-  color: #666;
-}
-
-.product-price .subtotal {
-  color: #333;
-  font-weight: bold;
-  margin-left: auto;
-}
-
-.order-actions {
+.action-bar {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 30px;
+  padding-top: 12px;
 }
 
-.loading {
-  height: 400px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.error {
+.empty {
+  background: var(--color-bg-card, #fff);
+  border-radius: var(--radius-md);
+  padding: 40px;
   text-align: center;
-  padding: 60px 0;
 }
 
-.error .el-button {
-  margin-top: 20px;
+@media (max-width: 600px) {
+  .goods-row { grid-template-columns: 56px 1fr; }
+  .goods-row strong { grid-column: 2; }
+  .page-head { flex-direction: column; align-items: flex-start; gap: 10px; }
 }
 </style>

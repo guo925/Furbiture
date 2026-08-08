@@ -14,7 +14,7 @@ import java.util.List;
  * 管理员商品图片管理控制器
  */
 @RestController
-@RequestMapping("/admin/product-images")
+@RequestMapping("/api/admin/product-images")
 @Tag(name = "管理员商品图片管理", description = "管理员商品图片管理相关接口")
 public class AdminProductImageController {
 

@@ -1,5 +1,5 @@
 <template>
-  <MerchantLayout title="商品管理" subtitle="发布、编辑、下架和维护店铺商品">
+  <div>
     <div class="page-tools">
       <div class="summary-card">
         <span>全部商品</span>
@@ -111,14 +111,13 @@
         <el-button type="primary" @click="handleSave">保存并上架</el-button>
       </template>
     </el-dialog>
-  </MerchantLayout>
+  </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import MerchantLayout from '../../components/MerchantLayout.vue'
 import { fileAPI, merchantAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
 

@@ -3,9 +3,11 @@ package com.gjx.controller.admin;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
 import com.gjx.entity.User;
+import com.gjx.enums.UserRoleEnum;
 import com.gjx.service.IUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +17,7 @@ import java.util.Map;
 /**
  * 管理员用户管理控制器
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/admin/users")
 @Tag(name = "管理员用户管理", description = "管理员用户管理相关接口")
@@ -55,7 +58,7 @@ public class AdminUserController {
             return R.error("用户名已存在");
         }
         if (user.getRole() == null || user.getRole().isEmpty()) {
-            user.setRole("USER");
+            user.setRole(UserRoleEnum.USER.getCode());
         }
         if (user.getPassword() != null && !user.getPassword().isEmpty()) {
             user.setPassword(passwordEncoder.encode(user.getPassword()));

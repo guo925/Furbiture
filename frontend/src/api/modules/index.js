@@ -1,0 +1,12 @@
+// 统一导出所有 API 模块，保持向后兼容
+export { authAPI } from './auth'
+export { fileAPI } from './file'
+export { productAPI, categoryAPI } from './product'
+export { cartAPI } from './cart'
+export { orderAPI } from './order'
+export { addressAPI } from './address'
+export { userAPI } from './user'
+export { adminAPI } from './admin'
+export { merchantAPI } from './merchant'
+export { favoriteAPI } from './favorite'
+export { default as request } from '../request'

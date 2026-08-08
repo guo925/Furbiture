@@ -8,9 +8,12 @@ import com.gjx.entity.Product;
 import com.gjx.mapper.ProductMapper;
 import com.gjx.service.ICategoryService;
 import com.gjx.service.IProductService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> implements IProductService {
 
@@ -28,6 +31,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     }
 
     @Override
+    @Cacheable(value = "productList", key = "'list_' + #categoryId + '_' + #keyword + '_' + #sortBy + '_' + #page + '_' + #size", unless = "#result == null || #result.records.isEmpty()")
     public Page<Product> listProducts(Long categoryId, String keyword, String sortBy, Integer page, Integer size) {
         LambdaQueryWrapper<Product> queryWrapper = new LambdaQueryWrapper<>();
 
@@ -107,24 +111,36 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return result;
     }
 
+    /**
+     * 批量填充商品分类名称
+     * <p>
+     * 优化：先收集所有 categoryId，一次批量查询，再映射回各商品，
+     * 避免每个商品单独查询一次数据库（N+1 问题）。
+     */
     private void fillCategoryNames(java.util.List<Product> products) {
         if (products == null || products.isEmpty()) {
             return;
         }
 
-        java.util.Map<Long, String> categoryCache = new java.util.HashMap<>();
+        // 收集所有非空 categoryId
+        java.util.Set<Long> categoryIds = products.stream()
+                .map(Product::getCategoryId)
+                .filter(id -> id != null)
+                .collect(java.util.stream.Collectors.toSet());
 
+        if (categoryIds.isEmpty()) {
+            return;
+        }
+
+        // 一次批量查询所有分类
+        java.util.Map<Long, String> nameMap = categoryService.listByIds(new java.util.ArrayList<>(categoryIds))
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Category::getId, Category::getName, (a, b) -> a));
+
+        // 映射分类名到商品
         for (Product product : products) {
             if (product.getCategoryId() != null) {
-                String categoryName = categoryCache.get(product.getCategoryId());
-                if (categoryName == null) {
-                    Category category = categoryService.getById(product.getCategoryId());
-                    if (category != null) {
-                        categoryName = category.getName();
-                        categoryCache.put(product.getCategoryId(), categoryName);
-                    }
-                }
-                product.setCategoryName(categoryName);
+                product.setCategoryName(nameMap.get(product.getCategoryId()));
             }
         }
     }

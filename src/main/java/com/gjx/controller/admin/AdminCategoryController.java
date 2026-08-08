@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
 import com.gjx.entity.Category;
 import com.gjx.service.ICategoryService;
+import lombok.extern.slf4j.Slf4j;
+import com.gjx.service.Impl.CategoryServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +15,7 @@ import java.util.List;
 /**
  * 管理员分类管理控制器
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/admin/categories")
 @Tag(name = "管理员分类管理", description = "管理员分类管理相关接口")
@@ -107,6 +110,8 @@ public class AdminCategoryController {
     public R<?> update(@PathVariable Long id, @RequestBody Category category) {
         category.setId(id);
         categoryService.updateById(category);
+        categoryService.evictCategoryTreeCache();
+        log.info("[管理员更新分类] id={}", category.getId());
         return R.ok("更新成功");
     }
 
@@ -119,6 +124,8 @@ public class AdminCategoryController {
     @DeleteMapping("/{id}")
     public R<?> delete(@PathVariable Long id) {
         categoryService.removeById(id);
+        categoryService.evictCategoryTreeCache();
+        log.info("[管理员删除分类] id={}", id);
         return R.ok("删除成功");
     }
 }

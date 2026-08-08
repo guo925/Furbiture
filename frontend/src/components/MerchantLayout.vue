@@ -24,6 +24,9 @@
           <p>{{ subtitle }}</p>
         </div>
         <div class="seller-account">
+          <el-button size="small" circle @click="theme.toggleTheme()" :title="theme.isDark.value ? '切换亮色' : '切换深色'">
+            <el-icon><Sunny v-if="theme.isDark.value" /><Moon v-else /></el-icon>
+          </el-button>
           <el-tag type="success" effect="light" round>营业中</el-tag>
           <span>{{ userStore.user?.username || '商家' }}</span>
           <el-button size="small" @click="logout">退出</el-button>
@@ -31,24 +34,27 @@
       </header>
 
       <section class="seller-content">
-        <slot />
+        <router-view />
       </section>
     </main>
   </div>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { DataBoard, Goods, List, Tickets, User } from '@element-plus/icons-vue'
+import { DataBoard, Goods, List, Tickets, User, Sunny, Moon } from '@element-plus/icons-vue'
+import { useTheme } from '../composables/useTheme'
 
-defineProps({
-  title: { type: String, default: '卖家中心' },
-  subtitle: { type: String, default: '管理商品、订单、类目和店铺资料' }
-})
+const theme = useTheme()
 
+const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+
+const title = computed(() => route.meta.title || '卖家中心')
+const subtitle = computed(() => '管理商品、订单、类目和店铺资料')
 
 const navItems = [
   { path: '/merchant', label: '经营工作台', icon: DataBoard },

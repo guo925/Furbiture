@@ -14,7 +14,7 @@ import java.util.List;
  * 管理员商品规格管理控制器
  */
 @RestController
-@RequestMapping("/admin/product-specs")
+@RequestMapping("/api/admin/product-specs")
 @Tag(name = "管理员商品规格管理", description = "管理员商品规格管理相关接口")
 public class AdminProductSpecController {
 

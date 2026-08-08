@@ -1,5 +1,5 @@
 <template>
-  <MerchantLayout title="经营工作台" subtitle="关注交易待办、商品表现和店铺基础经营状态">
+  <div>
     <div class="seller-dashboard">
       <section class="overview-panel">
         <div class="shop-card">
@@ -129,7 +129,7 @@
         </div>
       </section>
     </div>
-  </MerchantLayout>
+  </div>
 </template>
 
 <script setup>
@@ -149,7 +149,6 @@ import {
   TrendCharts,
   User
 } from '@element-plus/icons-vue'
-import MerchantLayout from '../../components/MerchantLayout.vue'
 import { merchantAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
 

@@ -2,7 +2,8 @@
 -- 清空所有表数据并重新插入
 -- 执行前请先执行: USE furniture_db;
 -- ============================================
-
+CREATE DATABASE IF NOT EXISTS furniture_db
+       USE furniture_db;
 -- 禁用外键检查（如果有外键约束）
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -200,4 +201,4 @@ SELECT CONCAT('商品图片数量: ', COUNT(*)) AS info FROM `product_image`;
 SELECT CONCAT('商品规格数量: ', COUNT(*)) AS info FROM `product_spec`;
 SELECT CONCAT('地址数量: ', COUNT(*)) AS info FROM `address`;
 SELECT CONCAT('购物车数量: ', COUNT(*)) AS info FROM `cart`;
-furniture_db
+

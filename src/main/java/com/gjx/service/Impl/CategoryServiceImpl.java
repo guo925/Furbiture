@@ -5,6 +5,9 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.gjx.entity.Category;
 import com.gjx.mapper.CategoryMapper;
 import com.gjx.service.ICategoryService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -15,10 +18,12 @@ import java.util.stream.Collectors;
 /**
  * 分类服务实现类
  */
+@Slf4j
 @Service
 public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> implements ICategoryService {
 
     @Override
+    @Cacheable(value = "categoryTree", key = "'all'", unless = "#result == null || #result.isEmpty()")
     public List<Category> getCategoryTree() {
         // 获取所有分类
         List<Category> allCategories = list();
@@ -47,6 +52,41 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     /**
      * 递归构建分类树
      */
+    /**
+     * 清除分类树缓存
+     */
+    @CacheEvict(value = "categoryTree", key = "'all'")
+    public void evictCategoryTreeCache() {
+        log.debug("清除分类树缓存");
+    }
+
+    /**
+     * 覆盖保存方法，自动清除分类树缓存
+     */
+    @Override
+    @CacheEvict(value = "categoryTree", key = "'all'")
+    public boolean save(Category entity) {
+        return super.save(entity);
+    }
+
+    /**
+     * 覆盖更新方法，自动清除分类树缓存
+     */
+    @Override
+    @CacheEvict(value = "categoryTree", key = "'all'")
+    public boolean updateById(Category entity) {
+        return super.updateById(entity);
+    }
+
+    /**
+     * 覆盖删除方法，自动清除分类树缓存
+     */
+    @Override
+    @CacheEvict(value = "categoryTree", key = "'all'")
+    public boolean removeById(java.io.Serializable id) {
+        return super.removeById(id);
+    }
+
     private void buildCategoryTree(Category parent, Map<Long, List<Category>> categoryMap) {
         List<Category> children = categoryMap.get(parent.getId());
         if (children != null && !children.isEmpty()) {

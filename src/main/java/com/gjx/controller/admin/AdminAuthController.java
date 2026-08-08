@@ -12,7 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/admin/auth")
+@RequestMapping("/api/admin/auth")
 @Tag(name = "管理员认证", description = "管理员认证相关接口")
 public class AdminAuthController {
 

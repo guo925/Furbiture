@@ -2,6 +2,7 @@ package com.gjx.controller.user;
 
 import com.gjx.common.R;
 import com.gjx.common.ResultCode;
+import com.gjx.dto.request.UpdateUserRequest;
 import com.gjx.entity.User;
 import com.gjx.service.IUserService;
 import com.gjx.util.AuthenticationUtil;
@@ -44,15 +45,32 @@ public class UserController {
 
     /**
      * 更新用户信息
-     * @param user 用户信息
-     * @param request HTTP请求
+     * <p>
+     * 仅允许更新邮箱、手机号、头像等非敏感字段，
+     * 防止用户通过请求体篡改 role、password 实现越权。
+     *
+     * @param requestDto 用户更新请求（仅含 email, phone, avatar）
+     * @param request    HTTP请求
      * @return 更新结果
      */
-    @Operation(summary = "更新用户信息", description = "更新当前用户的基本信息")
+    @Operation(summary = "更新用户信息", description = "更新当前用户的基本信息（邮箱、手机号、头像）")
     @PutMapping
-    public R<?> updateUser(@RequestBody User user, HttpServletRequest request) {
+    public R<?> updateUser(@RequestBody UpdateUserRequest requestDto, HttpServletRequest request) {
         Long userId = AuthenticationUtil.getUserIdFromRequest(request);
-        user.setId(userId);
+        User user = userService.getById(userId);
+        if (user == null) {
+            return R.error(ResultCode.NOT_FOUND, "用户不存在");
+        }
+        // 仅更新允许的字段，防止越权修改 role/password 等敏感字段
+        if (requestDto.getEmail() != null) {
+            user.setEmail(requestDto.getEmail());
+        }
+        if (requestDto.getPhone() != null) {
+            user.setPhone(requestDto.getPhone());
+        }
+        if (requestDto.getAvatar() != null) {
+            user.setAvatar(requestDto.getAvatar());
+        }
         userService.updateById(user);
         return R.ok("更新成功");
     }

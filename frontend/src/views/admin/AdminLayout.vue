@@ -1,189 +1,280 @@
 <template>
-  <div class="admin-layout">
+  <el-container class="admin-layout">
     <!-- 侧边栏 -->
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
-      <div class="sidebar-header">
-        <h3>管理后台</h3>
+    <el-aside :width="isCollapse ? '64px' : '220px'" class="admin-aside">
+      <div class="aside-header">
+        <div class="logo-icon">F</div>
+        <transition name="fade">
+          <span v-show="!isCollapse" class="logo-text">Furbiture 管理</span>
+        </transition>
       </div>
-      <nav class="sidebar-nav">
-        <router-link to="/admin/dashboard" class="nav-item">
-          <el-icon><House /></el-icon>
-          <span>控制台</span>
-        </router-link>
-        <router-link to="/admin/products" class="nav-item">
-          <el-icon><Goods /></el-icon>
-          <span>商品管理</span>
-        </router-link>
-        <router-link to="/admin/categories" class="nav-item">
-          <el-icon><List /></el-icon>
-          <span>分类管理</span>
-        </router-link>
-        <router-link to="/admin/orders" class="nav-item">
-          <el-icon><Ticket /></el-icon>
-          <span>订单管理</span>
-        </router-link>
-        <router-link to="/admin/users" class="nav-item">
-          <el-icon><User /></el-icon>
-          <span>用户管理</span>
-        </router-link>
-      </nav>
-      <div class="sidebar-footer">
-        <button @click="logout" class="btn">退出登录</button>
-      </div>
-    </aside>
 
-    <!-- 主内容区 -->
-    <main class="main-content">
-      <!-- 顶部导航 -->
-      <header class="main-header">
+      <el-menu
+        :default-active="activeMenu"
+        :collapse="isCollapse"
+        :collapse-transition="false"
+        background-color="#1a1a2e"
+        text-color="#a0aec0"
+        active-text-color="#ffffff"
+        router
+        class="aside-menu"
+      >
+        <el-menu-item index="/admin/dashboard">
+          <el-icon><DataAnalysis /></el-icon>
+          <template #title>控制台</template>
+        </el-menu-item>
+        <el-menu-item index="/admin/products">
+          <el-icon><Goods /></el-icon>
+          <template #title>商品管理</template>
+        </el-menu-item>
+        <el-menu-item index="/admin/categories">
+          <el-icon><Grid /></el-icon>
+          <template #title>分类管理</template>
+        </el-menu-item>
+        <el-menu-item index="/admin/orders">
+          <el-icon><Document /></el-icon>
+          <template #title>订单管理</template>
+        </el-menu-item>
+        <el-menu-item index="/admin/users">
+          <el-icon><User /></el-icon>
+          <template #title>用户管理</template>
+        </el-menu-item>
+      </el-menu>
+
+      <div class="aside-footer">
+        <el-button text class="collapse-btn" @click="isCollapse = !isCollapse">
+          <el-icon><Fold v-if="!isCollapse" /><Expand v-else /></el-icon>
+        </el-button>
+      </div>
+    </el-aside>
+
+    <!-- 主区域 -->
+    <el-container>
+      <!-- 顶部栏 -->
+      <el-header class="admin-header">
         <div class="header-left">
-          <button @click="toggleSidebar" class="menu-btn">
-            <el-icon><Menu /></el-icon>
-          </button>
+          <el-breadcrumb separator="/">
+            <el-breadcrumb-item>管理后台</el-breadcrumb-item>
+            <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
+          </el-breadcrumb>
         </div>
         <div class="header-right">
-          <span class="username">{{ userStore.user?.username }}</span>
+          <el-button circle @click="theme.toggleTheme()" :title="theme.isDark.value ? '切换亮色' : '切换深色'" style="margin-right: 12px">
+            <el-icon><Sunny v-if="theme.isDark.value" /><Moon v-else /></el-icon>
+          </el-button>
+          <el-tag type="success" size="small" effect="dark" style="margin-right: 16px">
+            <el-icon><CircleCheck /></el-icon> 系统运行中
+          </el-tag>
+          <el-dropdown trigger="click">
+            <div class="user-info">
+              <el-avatar :size="32" icon="UserFilled" />
+              <span class="user-name">{{ username }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>
+                  <el-icon><User /></el-icon> {{ username }}
+                </el-dropdown-item>
+                <el-dropdown-item disabled>
+                  <el-icon><Key /></el-icon> 管理员
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="handleLogout">
+                  <el-icon><SwitchButton /></el-icon> 退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
-      </header>
+      </el-header>
 
-      <!-- 页面内容 -->
-      <div class="content-wrapper">
+      <!-- 内容区 -->
+      <el-main class="admin-main">
         <router-view />
-      </div>
-    </main>
-  </div>
+      </el-main>
+    </el-container>
+  </el-container>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import {
+  DataAnalysis, Goods, Grid, Document, User,
+  Fold, Expand, ArrowDown, CircleCheck, Key, SwitchButton,
+  Sunny, Moon
+} from '@element-plus/icons-vue'
+import { useTheme } from '../../composables/useTheme'
+
+const theme = useTheme()
+import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '../../stores/user'
-import { House, Goods, List, Ticket, User, Menu } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
-const sidebarCollapsed = ref(false)
+const isCollapse = ref(false)
+const username = computed(() => userStore.user?.username || '管理员')
 
-onMounted(() => {
-  if (!userStore.isAuthenticated || userStore.user?.role !== 'ADMIN') {
-    router.push('/login')
-  }
-})
+const activeMenu = computed(() => route.path)
 
-const toggleSidebar = () => {
-  sidebarCollapsed.value = !sidebarCollapsed.value
+const titleMap = {
+  '/admin/dashboard': '控制台',
+  '/admin/products': '商品管理',
+  '/admin/categories': '分类管理',
+  '/admin/orders': '订单管理',
+  '/admin/users': '用户管理'
 }
+const currentTitle = computed(() => titleMap[route.path] || '')
 
-const logout = () => {
+const handleLogout = async () => {
+  await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
   userStore.logout()
-  ElMessage.success('退出成功')
   router.push('/login')
 }
 </script>
 
 <style scoped>
 .admin-layout {
-  display: flex;
-  min-height: 100vh;
-  background: #f5f7fa;
+  height: 100vh;
+  overflow: hidden;
 }
 
-.sidebar {
-  width: 200px;
-  background: #2c3e50;
-  color: #fff;
-  transition: width 0.3s;
-  position: relative;
-  min-height: 100vh;
-}
-
-.sidebar.collapsed {
-  width: 60px;
-}
-
-.sidebar-header {
-  padding: 20px;
-  border-bottom: 1px solid #34495e;
-}
-
-.sidebar-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: bold;
-}
-
-.sidebar-nav {
-  padding: 10px 0;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 20px;
-  color: #ecf0f1;
-  text-decoration: none;
-  transition: background 0.3s;
-}
-
-.nav-item:hover {
-  background: #34495e;
-}
-
-.nav-item.router-link-active {
-  background: #3498db;
-}
-
-.sidebar-footer {
-  position: absolute;
-  bottom: 0;
-  width: 100%;
-  padding: 20px;
-  border-top: 1px solid #34495e;
-  box-sizing: border-box;
-}
-
-.btn {
-  width: 100%;
-  padding: 10px;
-  background: #e74c3c;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.main-content {
-  flex: 1;
+/* 侧边栏 */
+.admin-aside {
+  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
   display: flex;
   flex-direction: column;
+  transition: width 0.3s;
+  overflow: hidden;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
 }
 
-.main-header {
-  height: 60px;
+.aside-header {
+  display: flex;
+  align-items: center;
+  padding: 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  margin-left: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.aside-menu {
+  flex: 1;
+  border-right: none;
+  padding-top: 8px;
+}
+
+.aside-menu .el-menu-item {
+  margin: 2px 8px;
+  border-radius: 8px;
+  height: 44px;
+  line-height: 44px;
+}
+
+.aside-menu .el-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.aside-menu .el-menu-item.is-active {
+  background: linear-gradient(135deg, #667eea, #764ba2) !important;
+}
+
+.aside-footer {
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: center;
+}
+
+.collapse-btn {
+  color: #a0aec0;
+  font-size: 18px;
+}
+
+/* 顶部栏 */
+.admin-header {
   background: #fff;
-  padding: 0 20px;
+  border-bottom: 1px solid #edf2f7;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  padding: 0 24px;
+  height: 56px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.menu-btn {
-  background: none;
-  border: none;
+.header-left :deep(.el-breadcrumb__inner) {
+  color: #718096;
+  font-weight: 400;
+}
+
+.header-left :deep(.el-breadcrumb__inner.is-link:hover) {
+  color: #667eea;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
-  font-size: 20px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
 }
 
-.username {
+.user-info:hover {
+  background: #f7fafc;
+}
+
+.user-name {
   font-size: 14px;
-  color: #333;
+  color: #2d3748;
+  font-weight: 500;
 }
 
-.content-wrapper {
-  flex: 1;
+/* 主内容 */
+.admin-main {
+  background: #f7fafc;
   padding: 20px;
   overflow-y: auto;
+  min-height: calc(100vh - 56px);
+}
+
+/* 过渡动画 */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>

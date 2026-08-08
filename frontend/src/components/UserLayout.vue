@@ -4,9 +4,13 @@
       <div class="shop-container top-strip-inner">
         <span>欢迎来到橙家优选</span>
         <div class="top-links">
+          <button type="button" class="theme-btn" @click="theme.toggleTheme()" :title="theme.isDark.value ? '切换亮色' : '切换深色'">
+            <el-icon><Sunny v-if="theme.isDark.value" /><Moon v-else /></el-icon>
+          </button>
           <template v-if="userStore.isAuthenticated">
             <router-link to="/profile">{{ userStore.user?.username || '个人中心' }}</router-link>
             <router-link to="/orders">我的订单</router-link>
+            <router-link to="/favorites">我的收藏</router-link>
             <button type="button" @click="logout">退出</button>
           </template>
           <template v-else>
@@ -27,16 +31,40 @@
           </span>
         </router-link>
 
-        <form class="search-bar" @submit.prevent="submitSearch">
-          <el-input v-model="keyword" placeholder="搜索沙发、床、餐桌、收纳柜">
+        <div class="search-bar" ref="searchRef">
+          <el-input
+            v-model="keyword"
+            placeholder="搜索沙发、床、餐桌、收纳柜"
+            @focus="showDropdown = true"
+            @blur="onBlur"
+            @keyup.enter="submitSearch"
+          >
             <template #append>
-              <el-button native-type="submit" color="#ff5000">搜索</el-button>
+              <el-button native-type="submit" color="#ff5000" @click="submitSearch">搜索</el-button>
             </template>
           </el-input>
+          <!-- 搜索下拉：历史 + 建议 -->
+          <div v-if="showDropdown && (searchHistory.length || suggestions.length)" class="search-dropdown">
+            <div v-if="searchHistory.length" class="dropdown-section">
+              <div class="dropdown-head">
+                <span>搜索历史</span>
+                <button type="button" @click="clearSearchHistory">清空</button>
+              </div>
+              <div class="dropdown-list">
+                <span v-for="word in searchHistory" :key="word" @mousedown.prevent="searchWord(word)">{{ word }}</span>
+              </div>
+            </div>
+            <div v-if="suggestions.length" class="dropdown-section">
+              <div class="dropdown-head"><span>搜索建议</span></div>
+              <div class="dropdown-list">
+                <span v-for="word in suggestions" :key="word" @mousedown.prevent="searchWord(word)">{{ word }}</span>
+              </div>
+            </div>
+          </div>
           <div class="quick-words">
             <button v-for="word in quickWords" :key="word" type="button" @click="searchWord(word)">{{ word }}</button>
           </div>
-        </form>
+        </div>
 
         <router-link to="/cart" class="cart-entry">
           <el-icon><ShoppingCart /></el-icon>
@@ -76,17 +104,26 @@
 <script setup>
 import { ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ShoppingCart } from '@element-plus/icons-vue'
+import { ShoppingCart, Sunny, Moon } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../stores/user'
 import { useCartStore } from '../stores/cart'
+import { useSearchHistory } from '../composables/useSearchHistory'
+import { useTheme } from '../composables/useTheme'
+import request from '../api/request'
 
+const theme = useTheme()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const cartStore = useCartStore()
+const { getHistory, addSearch, clearHistory } = useSearchHistory()
 const keyword = ref(route.query.keyword || '')
 const quickWords = ['沙发', '床', '餐桌', '收纳', '北欧']
+const showDropdown = ref(false)
+const suggestions = ref([])
+const searchHistory = ref(getHistory())
+let debounceTimer = null
 
 watch(() => route.query.keyword, value => {
   keyword.value = value || ''
@@ -99,12 +136,44 @@ onMounted(() => {
 })
 
 const submitSearch = () => {
+  if (keyword.value && keyword.value.trim()) {
+    addSearch(keyword.value.trim())
+    searchHistory.value = getHistory()
+  }
+  showDropdown.value = false
   router.push({ path: '/products', query: keyword.value ? { keyword: keyword.value } : {} })
 }
 
 const searchWord = (word) => {
   keyword.value = word
   submitSearch()
+}
+
+const clearSearchHistory = () => {
+  clearHistory()
+  searchHistory.value = []
+}
+
+// 输入时防抖获取搜索建议
+watch(keyword, (val) => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  if (!val || !val.trim()) {
+    suggestions.value = []
+    return
+  }
+  debounceTimer = setTimeout(async () => {
+    try {
+      const res = await request.get('/products/suggestions', { params: { keyword: val.trim() } })
+      suggestions.value = res.data.data || []
+    } catch {
+      suggestions.value = []
+    }
+  }, 200)
+})
+
+const onBlur = () => {
+  // 延迟关闭以确保 mousedown 先触发
+  setTimeout(() => { showDropdown.value = false }, 150)
 }
 
 const logout = () => {
@@ -222,6 +291,68 @@ const logout = () => {
 .search-bar {
   flex: 1;
   min-width: 260px;
+  position: relative;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 30;
+  padding: 8px 0;
+  margin-top: 2px;
+  border: 1px solid var(--color-border-light);
+}
+
+.dropdown-section {
+  padding: 4px 12px;
+}
+
+.dropdown-section + .dropdown-section {
+  border-top: 1px solid var(--color-border-light);
+}
+
+.dropdown-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.dropdown-head button {
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.dropdown-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 6px;
+}
+
+.dropdown-list span {
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-light);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all var(--transition-fast);
+}
+
+.dropdown-list span:hover {
+  background: var(--color-primary);
+  color: #fff;
 }
 
 .search-bar :deep(.el-input__wrapper) {
