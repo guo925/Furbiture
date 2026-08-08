@@ -1,6 +1,16 @@
 # AI开发协作规范
 
-> Slash Commands: `/restart` — 重启前后端项目服务
+> Slash Commands: `/restart` — 重启前后端项目服务 | `Agent: gitcommit-agent` — 提交门禁
+
+## 提交规范
+
+提交代码请使用 `/git-save`，该命令会自动执行：
+1. tester — 单元测试（全量测试通过）
+2. quality-engineer — 质量审查（零严重+零高危+评分≥60）
+3. 通过后自动生成 commit message 并推送
+
+禁止直接使用 `git commit`，会被 pre-commit hook 拦截。
+紧急情况可 `/git-save --force` 跳过质检。
 
 ## 1. 开发前必须理解上下文
 

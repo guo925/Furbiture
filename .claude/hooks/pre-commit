@@ -1,0 +1,113 @@
+#!/bin/bash
+# ============================================================
+# Furbiture Git Pre-commit Hook
+# 检查是否通过 tester + quality-engineer 质检
+# ============================================================
+
+CHECKS_DIR=".claude/checks"
+TESTER_FILE="$CHECKS_DIR/tester-result.json"
+QUALITY_FILE="$CHECKS_DIR/quality-result.json"
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo ""
+echo "============================================"
+echo "  Furbiture 提交门禁检查"
+echo "============================================"
+
+# ============================================================
+# 1. 如果只有非 Java 文件变更，跳过检查
+# ============================================================
+JAVA_CHANGES=$(git diff --cached --name-only -- '*.java' 2>/dev/null)
+if [ -z "$JAVA_CHANGES" ]; then
+    echo -e "${GREEN}✅ 无 Java 文件变更，跳过质检${NC}"
+    echo ""
+    exit 0
+fi
+
+# ============================================================
+# 2. 检查标记文件是否存在
+# ============================================================
+MISSING=0
+
+if [ ! -f "$TESTER_FILE" ]; then
+    echo -e "${RED}❌ 缺少单元测试结果: $TESTER_FILE${NC}"
+    MISSING=1
+fi
+
+if [ ! -f "$QUALITY_FILE" ]; then
+    echo -e "${RED}❌ 缺少质量审查结果: $QUALITY_FILE${NC}"
+    MISSING=1
+fi
+
+if [ $MISSING -eq 1 ]; then
+    echo ""
+    echo -e "${YELLOW}============================================${NC}"
+    echo -e "${YELLOW}  提交被阻止：尚未运行质检${NC}"
+    echo -e "${YELLOW}============================================${NC}"
+    echo ""
+    echo "  请先运行以下命令完成质检："
+    echo ""
+    echo "    /git-save"
+    echo ""
+    echo "  该命令会自动执行单元测试和质量审查，"
+    echo "  全部通过后自动提交。"
+    echo ""
+    echo "  或强制跳过质检（不推荐）："
+    echo ""
+    echo "    git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+# ============================================================
+# 3. 检查质检结果
+# ============================================================
+
+# 检查 tester 结果
+TESTER_PASS=$(python3 -c "import json; print(json.load(open('$TESTER_FILE')).get('pass', False))" 2>/dev/null)
+TESTER_TOTAL=$(python3 -c "import json; d=json.load(open('$TESTER_FILE')); print(d.get('summary',{}).get('total','?'))" 2>/dev/null)
+TESTER_PASSED=$(python3 -c "import json; d=json.load(open('$TESTER_FILE')); print(d.get('summary',{}).get('passed','?'))" 2>/dev/null)
+TESTER_FAILED=$(python3 -c "import json; d=json.load(open('$TESTER_FILE')); print(d.get('summary',{}).get('failed','?'))" 2>/dev/null)
+
+# 检查 quality 结果
+QUALITY_PASS=$(python3 -c "import json; print(json.load(open('$QUALITY_FILE')).get('pass', False))" 2>/dev/null)
+QUALITY_SCORE=$(python3 -c "import json; d=json.load(open('$QUALITY_FILE')); print(d.get('summary',{}).get('score','?'))" 2>/dev/null)
+QUALITY_CRITICAL=$(python3 -c "import json; d=json.load(open('$QUALITY_FILE')); print(d.get('summary',{}).get('issues',{}).get('critical','?'))" 2>/dev/null)
+
+# ============================================================
+# 4. 输出结果
+# ============================================================
+
+echo ""
+echo "  单元测试: $TESTER_PASSED/$TESTER_TOTAL 通过"
+echo "  质量审查: $QUALITY_SCORE/100 分, 严重问题: $QUALITY_CRITICAL"
+echo ""
+
+if [ "$TESTER_PASS" = "True" ] && [ "$QUALITY_PASS" = "True" ]; then
+    echo -e "${GREEN}============================================${NC}"
+    echo -e "${GREEN}  ✅ 质检通过，允许提交${NC}"
+    echo -e "${GREEN}============================================${NC}"
+    echo ""
+    exit 0
+else
+    echo -e "${RED}============================================${NC}"
+    echo -e "${RED}  ❌ 提交被阻止：质检未通过${NC}"
+    echo -e "${RED}============================================${NC}"
+    echo ""
+    if [ "$TESTER_PASS" != "True" ]; then
+        echo -e "  ${RED}单元测试未通过${NC} (失败: $TESTER_FAILED)"
+    fi
+    if [ "$QUALITY_PASS" != "True" ]; then
+        echo -e "  ${RED}质量审查未通过${NC} (评分: $QUALITY_SCORE, 严重: $QUALITY_CRITICAL)"
+    fi
+    echo ""
+    echo "  请修复问题后重新运行 /git-save"
+    echo "  或使用 git commit --no-verify 强制提交"
+    echo ""
+    exit 1
+fi

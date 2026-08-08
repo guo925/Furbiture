@@ -37,3 +37,4 @@ env/
 __pycache__/
 *.exe
 *.zip
+.claude/checks/
