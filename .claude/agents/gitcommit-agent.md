@@ -63,6 +63,16 @@ rm -f .claude/checks/tester-result.json .claude/checks/quality-result.json
 
 注意：这两个 agent 各自独立运行，互不干扰。等待两者都完成。
 
+> ⚠️ **完成契约（务必遵守）**
+>
+> 你的最终消息**就是交付物**。**禁止**在子 agent 仍在运行时结束回合——
+> "已启动检查，等待结果"不是完成，而是失败：父回合一旦结束，子 agent 的结果将被孤立，
+> 标记文件永远不会生成，`/git-save` 会因"标记文件缺失"被 pre-commit hook 拦截。
+>
+> 结束回合前必须满足：`.claude/checks/tester-result.json` 与 `.claude/checks/quality-result.json`
+> **两个文件都已存在且可解析**。若子 agent 返回时未写文件，**重新启动它们**并在 prompt 中
+> 明确要求"完成前必须写入标记文件"，直到文件真实产出为止。
+
 ### Step 4: 检查标记文件并判定
 
 ```bash
@@ -95,9 +105,10 @@ cat .claude/checks/quality-result.json 2>/dev/null || echo '{"pass":false,"error
   正在提交...
 ```
 
-然后使用 Skill 工具加载 `git-save` 技能，执行提交和推送流程。
+**不要自行执行提交。** 本 agent 的职责到质检为止——把结论返回给调用方（`/git-save` 命令），
+由它生成 commit message 并执行 `git add` / `git commit` / `git push`。
 
-**注意：** 调用 git-save 时，commit message 应简要说明本次变更内容。按 git-save 技能的规范自动生成。
+> 这样划分是为了避免循环调用：`/git-save` → `gitcommit-agent` → `/git-save` 会形成死循环。
 
 ### Step 5B: 质检不通过 → 拦截
 
@@ -123,7 +134,7 @@ cat .claude/checks/quality-result.json 2>/dev/null || echo '{"pass":false,"error
 
 **输出详细失败原因，帮助用户定位和修复问题。**
 
-### Step 6: 强制提交（可选）
+### Step 6: 强制模式（由 /git-save 决策，本 agent 不执行提交）
 
 如果用户明确要求 `--force`：
 
@@ -137,7 +148,11 @@ cat .claude/checks/quality-result.json 2>/dev/null || echo '{"pass":false,"error
   确认请在下一轮输入 "yes"
 ```
 
-用户确认后，直接调用 git-save 技能提交。
+用户确认后，**不走质检**，直接把结论返回给调用方：
+告知 `/git-save` 以强制模式继续执行提交。
+
+> 强制模式下的确认责任在 `/git-save` 命令侧；本 agent 若被直接调用，
+> 只需把"未质检、用户已授权强制"这一事实报告回去即可。
 
 ---
 

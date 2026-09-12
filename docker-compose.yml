@@ -1,0 +1,113 @@
+# ============================================================
+# 一键启动全栈：MySQL + Redis + 后端 + 前端(Nginx)
+# 使用前请复制 deploy/.env.example 为 deploy/.env 并填写真实密钥
+# 启动：docker compose --env-file deploy/.env up -d --build
+# ============================================================
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: furbiture-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 必须配置}
+      MYSQL_DATABASE: ${DB_NAME:-furniture_db}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 首次启动时按文件名顺序执行初始化脚本，顺序不可调整
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/merchant_update.sql:/docker-entrypoint-initdb.d/02-merchant_update.sql:ro
+      - ./database/migration_v2.sql:/docker-entrypoint-initdb.d/03-migration_v2.sql:ro
+      - ./database/migration_v3_planb.sql:/docker-entrypoint-initdb.d/04-migration_v3_planb.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - furbiture
+
+  redis:
+    image: redis:7-alpine
+    container_name: furbiture-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD 必须配置}
+      --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - furbiture
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: furbiture-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # ⚠️ 传输安全说明（上线前请评估）
+      # 当前 useSSL=false + allowPublicKeyRetrieval=true 是 Docker 单机编排的常见写法，
+      # 其安全性依赖两点：① MySQL 容器未发布端口，只在内网 bridge 可达；
+      # ② 没有其他容器被攻破。其中 allowPublicKeyRetrieval=true 的风险更实在——
+      # MySQL 8 默认 caching_sha2_password，非 TLS 下客户端要向服务端索取 RSA 公钥来
+      # 加密口令，同网络内的中间人可替换该公钥从而窃取数据库密码。
+      # 对外生产环境请改为启用 TLS：
+      #   useSSL=true&requireSSL=true&sslMode=VERIFY_IDENTITY  并挂载服务端证书，
+      #   同时移除 allowPublicKeyRetrieval=true。
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-furniture_db}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # JWT 密钥必须为 32 字节以上的强随机值，否则应用会拒绝启动
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 必须配置}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      UPLOAD_DIR: /data/furniture-uploads/
+      TZ: Asia/Shanghai
+    volumes:
+      - upload-data:/data/furniture-uploads
+    networks:
+      - furbiture
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: furbiture-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    networks:
+      - furbiture
+
+volumes:
+  mysql-data:
+  redis-data:
+  upload-data:
+
+networks:
+  furbiture:
+    driver: bridge

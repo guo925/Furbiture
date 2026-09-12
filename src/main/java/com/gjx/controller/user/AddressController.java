@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -47,6 +48,7 @@ public class AddressController {
      */
     @Operation(summary = "添加地址", description = "添加新的收货地址")
     @PostMapping
+    @Transactional(rollbackFor = Exception.class)
     public ResponseEntity<R<?>> add(@RequestBody Address address, HttpServletRequest request) {
         // 验证手机号码格式
         if (!ValidationUtil.isValidPhone(address.getPhone())) {
@@ -72,6 +74,7 @@ public class AddressController {
      */
     @Operation(summary = "更新地址", description = "更新收货地址信息")
     @PutMapping("/{id}")
+    @Transactional(rollbackFor = Exception.class)
     public ResponseEntity<R<?>> update(@PathVariable Long id, @RequestBody Address address, HttpServletRequest request) {
         // 验证手机号码格式
         if (!ValidationUtil.isValidPhone(address.getPhone())) {

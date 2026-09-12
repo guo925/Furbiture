@@ -53,13 +53,19 @@ public class SecurityConfig {
                                 "/api/admin/auth/login",
                                 "/api/products/**",
                                 "/api/categories/**",
-                                "/api/files/**",
+                                // 注意：/api/files/** 不在放行清单中，上传接口必须登录后调用，
+                                // 否则匿名用户可任意上传文件占用存储甚至上传恶意内容
                                 "/uploads/**",
                                 "/api/users/current",
                                 "/doc.html",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
-                                "/v3/api-docs/**"
+                                "/v3/api-docs/**",
+                                // 仅放行健康检查与信息端点，其余 actuator 端点（env/beans/heapdump 等）
+                                // 会泄露配置与内存信息，必须保持需要认证
+                                "/actuator/health",
+                                "/actuator/health/**",
+                                "/actuator/info"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasAuthority(UserRoleEnum.ADMIN.getCode())
                         .requestMatchers("/api/merchant/**").hasAuthority(UserRoleEnum.MERCHANT.getCode())

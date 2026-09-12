@@ -117,7 +117,15 @@
 
 ### 4.7 退款审核流程
 - 新增 `POST /api/orders/{orderNo}/refund`：用户申请退款
-- 退款时自动取消订单并恢复库存
+- ~~退款时自动取消订单并恢复库存~~
+
+> **⚠️ 订正（2026-09-11）**：本节描述的退款实现是**错误的**，已于上线加固中修复。
+> 原实现把退款直接转调 `cancelOrder()`，而后者只允许「待付款」状态取消，
+> 导致**已付款/已发货订单申请退款必然报错**；且请求体的退款原因被丢弃。
+> 现实现为独立状态流转 `PAID/DELIVERED → REFUNDED`，写入 `refund_amount`、
+> `refund_reason`、`refund_time` 三个字段，并且**已发货订单退款不回补库存**
+> （货仍在用户手上时恢复库存会导致超卖）。详见 `src/main/java/com/gjx/service/Impl/OrderServiceImpl.java`
+> 的 `requestRefund()`。
 
 ---
 

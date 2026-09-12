@@ -61,7 +61,22 @@ public class Order {
      * 取消时间
      */
     private LocalDateTime cancelTime;
-    
+
+    /**
+     * 退款金额（对应数据库 refund_amount，由 migration_v3_planb.sql 添加）
+     */
+    private BigDecimal refundAmount;
+
+    /**
+     * 退款原因（对应数据库 refund_reason）
+     */
+    private String refundReason;
+
+    /**
+     * 退款时间（对应数据库 refund_time）
+     */
+    private LocalDateTime refundTime;
+
     /**
      * 创建时间
      */

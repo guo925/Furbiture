@@ -80,15 +80,39 @@ QUALITY_SCORE=$(python3 -c "import json; d=json.load(open('$QUALITY_FILE')); pri
 QUALITY_CRITICAL=$(python3 -c "import json; d=json.load(open('$QUALITY_FILE')); print(d.get('summary',{}).get('issues',{}).get('critical','?'))" 2>/dev/null)
 
 # ============================================================
+# 3.5 校验变更指纹
+# ============================================================
+# 目的：防止"先拿到通过标记，再修改代码"绕过质检。
+# 质检完成时会把当时工作区的 Java 变更指纹写进标记文件；
+# 提交时重新计算一次，两者不一致说明代码在质检后被改过，标记即失效。
+#
+# 指纹算法必须与 gitcommit-agent.md / git-save.md 中保持一致：
+#   git diff HEAD -- '*.java' ':!*Test*.java' | sha256sum
+CURRENT_HASH=$(git diff HEAD -- '*.java' ':!*Test*.java' 2>/dev/null | sha256sum | cut -d' ' -f1)
+TESTER_HASH=$(python3 -c "import json; print(json.load(open('$TESTER_FILE')).get('commit_hash',''))" 2>/dev/null)
+QUALITY_HASH=$(python3 -c "import json; print(json.load(open('$QUALITY_FILE')).get('commit_hash',''))" 2>/dev/null)
+
+HASH_MISMATCH=0
+if [ "$TESTER_HASH" != "$CURRENT_HASH" ]; then
+    HASH_MISMATCH=1
+fi
+if [ "$QUALITY_HASH" != "$CURRENT_HASH" ]; then
+    HASH_MISMATCH=1
+fi
+
+# ============================================================
 # 4. 输出结果
 # ============================================================
 
 echo ""
 echo "  单元测试: $TESTER_PASSED/$TESTER_TOTAL 通过"
 echo "  质量审查: $QUALITY_SCORE/100 分, 严重问题: $QUALITY_CRITICAL"
+if [ "$HASH_MISMATCH" -eq 1 ]; then
+    echo "  变更指纹: ❌ 不一致（质检后代码被修改）"
+fi
 echo ""
 
-if [ "$TESTER_PASS" = "True" ] && [ "$QUALITY_PASS" = "True" ]; then
+if [ "$TESTER_PASS" = "True" ] && [ "$QUALITY_PASS" = "True" ] && [ "$HASH_MISMATCH" -eq 0 ]; then
     echo -e "${GREEN}============================================${NC}"
     echo -e "${GREEN}  ✅ 质检通过，允许提交${NC}"
     echo -e "${GREEN}============================================${NC}"
@@ -104,6 +128,11 @@ else
     fi
     if [ "$QUALITY_PASS" != "True" ]; then
         echo -e "  ${RED}质量审查未通过${NC} (评分: $QUALITY_SCORE, 严重: $QUALITY_CRITICAL)"
+    fi
+    if [ "$HASH_MISMATCH" -eq 1 ]; then
+        echo -e "  ${RED}变更指纹不一致${NC} —— 质检完成后代码又被修改过，原质检结论已失效"
+        echo -e "  标记指纹: ${TESTER_HASH:0:16}..."
+        echo -e "  当前指纹: ${CURRENT_HASH:0:16}..."
     fi
     echo ""
     echo "  请修复问题后重新运行 /git-save"

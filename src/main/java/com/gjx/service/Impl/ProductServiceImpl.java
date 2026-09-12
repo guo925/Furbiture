@@ -10,8 +10,11 @@ import com.gjx.service.ICategoryService;
 import com.gjx.service.IProductService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+
+import java.io.Serializable;
 
 @Slf4j
 @Service
@@ -21,13 +24,55 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     private ICategoryService categoryService;
 
     @Override
+    @CacheEvict(value = "productList", allEntries = true)
     public boolean decreaseStock(Long productId, Integer quantity) {
         return baseMapper.decreaseStock(productId, quantity) > 0;
     }
 
     @Override
+    @CacheEvict(value = "productList", allEntries = true)
     public boolean increaseStock(Long productId, Integer quantity) {
         return baseMapper.increaseStock(productId, quantity) > 0;
+    }
+
+    @Override
+    @CacheEvict(value = "productList", allEntries = true)
+    public void evictProductListCache() {
+        log.debug("清除商品列表缓存");
+    }
+
+    // ==================== 写操作统一失效商品列表缓存 ====================
+    // 商品列表缓存了名称、价格、库存、销量与分类名，任一字段变化都必须让缓存失效，
+    // 否则前端会在 TTL 内看到过期数据。
+
+    @Override
+    @CacheEvict(value = "productList", allEntries = true)
+    public boolean save(Product entity) {
+        return super.save(entity);
+    }
+
+    @Override
+    @CacheEvict(value = "productList", allEntries = true)
+    public boolean updateById(Product entity) {
+        return super.updateById(entity);
+    }
+
+    @Override
+    @CacheEvict(value = "productList", allEntries = true)
+    public boolean removeById(Serializable id) {
+        return super.removeById(id);
+    }
+
+    @Override
+    @CacheEvict(value = "productList", allEntries = true)
+    public boolean removeByIds(java.util.Collection<?> list) {
+        return super.removeByIds(list);
+    }
+
+    @Override
+    @CacheEvict(value = "productList", allEntries = true)
+    public boolean updateBatchById(java.util.Collection<Product> entityList) {
+        return super.updateBatchById(entityList);
     }
 
     @Override

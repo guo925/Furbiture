@@ -23,6 +23,14 @@ public interface IProductService extends IService<Product> {
      * @return 是否成功
      */
     boolean increaseStock(Long productId, Integer quantity);
+
+    /**
+     * 清除商品列表缓存
+     * <p>
+     * 商品列表缓存（productList）内嵌了分类名称与库存、销量等易变字段，
+     * 任何导致这些数据变化的写操作都需要调用本方法失效缓存。
+     */
+    void evictProductListCache();
     
     /**
      * 获取商品列表

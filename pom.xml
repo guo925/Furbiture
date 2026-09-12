@@ -60,6 +60,12 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
+        <!-- Actuator：健康检查与运行指标（生产运维必需） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- Validation -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

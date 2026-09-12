@@ -5,8 +5,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
 import com.gjx.common.ResultCode;
 import com.gjx.entity.*;
+import com.gjx.enums.OrderStatusEnum;
 import com.gjx.mapper.OrderItemMapper;
 import com.gjx.mapper.OrderMapper;
+import com.gjx.service.IOrderService;
 import com.gjx.service.IProductService;
 import com.gjx.service.IUserService;
 import com.gjx.util.AuthenticationUtil;
@@ -41,6 +43,9 @@ public class MerchantOrderController {
 
     @Autowired
     private IUserService userService;
+
+    @Autowired
+    private IOrderService orderService;
 
     @Operation(summary = "获取订单列表", description = "获取包含商家商品的订单分页列表")
     @GetMapping("/orders")
@@ -90,23 +95,31 @@ public class MerchantOrderController {
         List<OrderItem> merchantItems = allItems.stream()
                 .filter(item -> merchantProductIds.contains(item.getProductId())).toList();
 
+        // 归属校验：订单不含本商家商品时，视为不存在，避免商家通过订单号探测/查看他人订单
+        if (merchantItems.isEmpty()) return R.error(ResultCode.NOT_FOUND, "订单不存在");
+
         Map<String, Object> result = new HashMap<>();
         result.put("order", order);
         result.put("orderItems", merchantItems);
         return R.ok(result);
     }
 
-    @Operation(summary = "更新订单状态", description = "商家更新订单状态（如发货）")
+    @Operation(summary = "更新订单状态", description = "商家更新订单状态（当前仅支持发货）")
     @PutMapping("/orders/{orderNo}/status")
     public R<?> updateOrderStatus(@PathVariable String orderNo, @RequestBody Map<String, Integer> body, HttpServletRequest request) {
-        Order order = orderMapper.selectOne(
-                new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
-        if (order == null) return R.error(ResultCode.NOT_FOUND, "订单不存在");
-
+        Long merchantId = getMerchantId(request);
         Integer newStatus = body.get("status");
-        order.setStatus(newStatus);
-        orderMapper.updateById(order);
-        log.info("[商家更新订单状态] orderNo={}, newStatus={}", orderNo, newStatus);
+        if (newStatus == null) return R.error(ResultCode.PARAM_ERROR, "状态不能为空");
+
+        // 状态白名单：商家仅可执行"发货"，其余流转由用户（确认收货）或管理员负责，
+        // 避免商家自行把订单改成已完成/已退款等状态
+        if (!OrderStatusEnum.DELIVERED.getCode().equals(newStatus)) {
+            return R.error(ResultCode.FORBIDDEN, "商家仅可执行发货操作");
+        }
+
+        // 归属校验与状态流转在 Service 层统一处理（订单必须含本商家商品，且当前为已付款）
+        orderService.deliverOrderByMerchant(orderNo, merchantId);
+        log.info("[商家更新订单状态] orderNo={}, newStatus={}, merchantId={}", orderNo, newStatus, merchantId);
         return R.ok("更新成功");
     }
 

@@ -21,11 +21,18 @@ spring:
       max-file-size: 10MB
       max-request-size: 50MB
 
+# 日志格式：统一带 traceId，便于按单次请求检索全链路日志
+# traceId 由 TraceIdFilter 写入 MDC，未进入过滤器（如定时任务）时显示为 "-"
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{traceId:-}] %logger{36} - %msg%n"
+
 # MyBatis-Plus 配置
 mybatis-plus:
   configuration:
-    # 日志输出（开发环境开启，生产环境关闭）
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # SQL 日志默认关闭（会打印 SQL 及参数，生产环境不可开启）
+    # 开发环境在 application-dev.yml 中覆盖为 StdOutImpl
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
     # 下划线转驼峰
     map-underscore-to-camel-case: true
   # 实体类包路径
@@ -67,6 +74,18 @@ cors:
 # 订单超时配置
 order:
   timeout-minutes: 30
+
+# 健康检查与指标端点（仅暴露 health / info，避免泄露配置与运行时信息）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
 
 # 服务器端口
 server:

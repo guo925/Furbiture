@@ -60,29 +60,32 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         log.debug("清除分类树缓存");
     }
 
+    // 分类变更会同时影响分类树与商品列表（商品列表内嵌 categoryName），
+    // 因此写操作需要同时失效两个缓存，否则商品列表会残留旧分类名。
+
     /**
-     * 覆盖保存方法，自动清除分类树缓存
+     * 覆盖保存方法，自动清除分类树与商品列表缓存
      */
     @Override
-    @CacheEvict(value = "categoryTree", key = "'all'")
+    @CacheEvict(value = {"categoryTree", "productList"}, allEntries = true)
     public boolean save(Category entity) {
         return super.save(entity);
     }
 
     /**
-     * 覆盖更新方法，自动清除分类树缓存
+     * 覆盖更新方法，自动清除分类树与商品列表缓存
      */
     @Override
-    @CacheEvict(value = "categoryTree", key = "'all'")
+    @CacheEvict(value = {"categoryTree", "productList"}, allEntries = true)
     public boolean updateById(Category entity) {
         return super.updateById(entity);
     }
 
     /**
-     * 覆盖删除方法，自动清除分类树缓存
+     * 覆盖删除方法，自动清除分类树与商品列表缓存
      */
     @Override
-    @CacheEvict(value = "categoryTree", key = "'all'")
+    @CacheEvict(value = {"categoryTree", "productList"}, allEntries = true)
     public boolean removeById(java.io.Serializable id) {
         return super.removeById(id);
     }

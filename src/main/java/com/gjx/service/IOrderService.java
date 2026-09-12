@@ -23,26 +23,50 @@ public interface IOrderService extends IService<Order> {
     /**
      * 模拟支付
      * @param orderNo 订单号
+     * @param userId 当前用户ID（用于校验订单归属）
      */
-    void mockPay(String orderNo);
-    
+    void mockPay(String orderNo, Long userId);
+
     /**
      * 取消订单
      * @param orderNo 订单号
+     * @param userId 当前用户ID（用于校验订单归属）
      */
-    void cancelOrder(String orderNo);
-    
+    void cancelOrder(String orderNo, Long userId);
+
     /**
-     * 发货
+     * 发货（管理员操作，不需要归属校验）
      * @param orderNo 订单号
      */
     void deliverOrder(String orderNo);
-    
+
+    /**
+     * 商家发货（需要校验订单包含该商家的商品）
+     * @param orderNo 订单号
+     * @param merchantId 商家ID
+     */
+    void deliverOrderByMerchant(String orderNo, Long merchantId);
+
     /**
      * 确认收货
      * @param orderNo 订单号
+     * @param userId 当前用户ID（用于校验订单归属）
      */
-    void confirmReceive(String orderNo);
+    void confirmReceive(String orderNo, Long userId);
+
+    /**
+     * 申请退款
+     * @param orderNo 订单号
+     * @param userId 当前用户ID（用于校验订单归属）
+     * @param reason 退款原因
+     */
+    void requestRefund(String orderNo, Long userId, String reason);
+
+    /**
+     * 超时自动取消订单（定时任务调用，原子操作，重复执行不会重复回补库存）
+     * @param orderId 订单ID
+     */
+    void cancelTimeoutOrder(Long orderId);
     
     /**
      * 获取用户订单列表

@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
@@ -99,36 +100,64 @@ public class MerchantProductController {
 
     @Operation(summary = "批量更新商品状态", description = "批量上下架商品")
     @PutMapping("/products/batch/status")
+    @Transactional(rollbackFor = Exception.class)
     public R<?> batchUpdateStatus(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         Long merchantId = getMerchantId(request);
-        @SuppressWarnings("unchecked")
-        List<Integer> ids = (List<Integer>) body.get("ids");
-        Integer status = (Integer) body.get("status");
-        if (ids == null || ids.isEmpty() || status == null) return R.error("参数错误");
-        for (Integer id : ids) {
-            Product p = productService.getById(id.longValue());
-            if (p != null && p.getMerchantId().equals(merchantId)) {
-                p.setStatus(status);
-                productService.updateById(p);
-            }
+        List<Long> ids = parseIds(body);
+        Integer status = body.get("status") instanceof Number n ? n.intValue() : null;
+        if (ids.isEmpty() || status == null) return R.error(ResultCode.PARAM_ERROR, "参数错误");
+
+        // 一次性查出当前商家名下的商品，既避免逐个查询（N+1），
+        // 也用数量比对严格拦截越权 ID —— 只要有一个 ID 不属于本商家就整体拒绝，不做静默跳过
+        List<Product> ownedProducts = productService.list(new LambdaQueryWrapper<Product>()
+                .in(Product::getId, ids)
+                .eq(Product::getMerchantId, merchantId));
+        if (ownedProducts.size() != ids.size()) {
+            return R.error(ResultCode.FORBIDDEN, "存在无权操作的商品");
         }
+
+        ownedProducts.forEach(p -> p.setStatus(status));
+        productService.updateBatchById(ownedProducts);
+        log.info("[商家批量更新商品状态] merchantId={}, count={}, status={}", merchantId, ids.size(), status);
         return R.ok("批量更新成功");
     }
 
     @Operation(summary = "批量删除商品")
     @DeleteMapping("/products/batch")
+    @Transactional(rollbackFor = Exception.class)
     public R<?> batchDelete(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         Long merchantId = getMerchantId(request);
-        @SuppressWarnings("unchecked")
-        List<Integer> ids = (List<Integer>) body.get("ids");
-        if (ids == null || ids.isEmpty()) return R.error("参数错误");
-        for (Integer id : ids) {
-            Product p = productService.getById(id.longValue());
-            if (p != null && p.getMerchantId().equals(merchantId)) {
-                productService.removeById(id.longValue());
-            }
+        List<Long> ids = parseIds(body);
+        if (ids.isEmpty()) return R.error(ResultCode.PARAM_ERROR, "参数错误");
+
+        long ownedCount = productService.count(new LambdaQueryWrapper<Product>()
+                .in(Product::getId, ids)
+                .eq(Product::getMerchantId, merchantId));
+        if (ownedCount != ids.size()) {
+            return R.error(ResultCode.FORBIDDEN, "存在无权操作的商品");
         }
+
+        productService.removeByIds(ids);
+        log.info("[商家批量删除商品] merchantId={}, count={}", merchantId, ids.size());
         return R.ok("批量删除成功");
+    }
+
+    /**
+     * 解析请求体中的 ID 列表
+     * <p>
+     * 不能直接强转为 {@code List<Long>}：Jackson 把 JSON 数组反序列化为 {@code Map<String,Object>}
+     * 时会生成 {@code ArrayList<Integer>}，强转后一旦访问元素即抛 ClassCastException。
+     * 这里按 {@link Number} 统一取值再转 long，兼容 Integer/Long 两种驱动行为。
+     */
+    private List<Long> parseIds(Map<String, Object> body) {
+        Object rawIds = body.get("ids");
+        if (!(rawIds instanceof List<?> rawList)) {
+            return List.of();
+        }
+        return rawList.stream()
+                .filter(Number.class::isInstance)
+                .map(item -> ((Number) item).longValue())
+                .toList();
     }
 
     private Long getMerchantId(HttpServletRequest request) {

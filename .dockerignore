@@ -1,0 +1,13 @@
+# 构建上下文排除项：避免把构建产物、依赖、IDE 配置打进镜像层
+target/
+.idea/
+.vscode/
+.git/
+.gitignore
+*.iml
+*.md
+
+frontend/node_modules/
+frontend/dist/
+database/
+deploy/

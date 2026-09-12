@@ -32,6 +32,12 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
 
     @Override
     public void addToCart(Long userId, Long productId, Integer quantity) {
+        // 数量必须为正整数。若允许负数，下单时 `stock >= quantity` 恒为真，
+        // 而扣减 SQL 是 `stock = stock - quantity`，负数量会变成反向增加库存（可被刷库存）
+        if (quantity == null || quantity <= 0) {
+            throw new BusinessException("商品数量必须大于 0");
+        }
+
         // 验证商品是否存在
         Product product = productMapper.selectById(productId);
         if (product == null) {
@@ -66,6 +72,11 @@ public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements IC
 
     @Override
     public void updateCartItem(Long userId, Long cartItemId, Integer quantity) {
+        // 同上：负数量会导致下单时反向增加库存
+        if (quantity == null || quantity <= 0) {
+            throw new BusinessException("商品数量必须大于 0");
+        }
+
         // 验证购物车商品是否存在且属于当前用户
         Cart cart = getById(cartItemId);
         if (cart == null) {

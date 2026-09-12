@@ -29,6 +29,16 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+### 前端构建产物 ###
+# 注意：必须写成 frontend/dist/，原先的 /dist/ 锚定在仓库根目录，匹配不到前端产物，
+# 导致每次 npm run build 都会把哈希文件名写进提交历史
+frontend/dist/
+
+### 部署密钥 ###
+# 生产环境变量文件含数据库口令与 JWT 密钥，绝不能入库
+deploy/.env
+*.env.local
+
 ### VS Code ###
 .vscode/
 node_modules/

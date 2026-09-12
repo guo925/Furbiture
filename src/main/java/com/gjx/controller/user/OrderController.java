@@ -49,47 +49,60 @@ public class OrderController {
     /**
      * 模拟支付
      * @param orderNo 订单号
+     * @param request HTTP请求
      * @return 支付结果
      */
     @Operation(summary = "模拟支付", description = "模拟订单支付")
     @PostMapping("/pay")
-    public R<?> pay(@RequestParam String orderNo) {
-        orderService.mockPay(orderNo);
+    public R<?> pay(@RequestParam String orderNo, HttpServletRequest request) {
+        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        orderService.mockPay(orderNo, userId);
         return R.ok("支付成功");
     }
 
     /**
      * 取消订单
      * @param orderNo 订单号
+     * @param request HTTP请求
      * @return 取消结果
      */
     @Operation(summary = "取消订单", description = "取消未支付的订单")
     @PostMapping("/cancel")
-    public R<?> cancel(@RequestParam String orderNo) {
-        orderService.cancelOrder(orderNo);
+    public R<?> cancel(@RequestParam String orderNo, HttpServletRequest request) {
+        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        orderService.cancelOrder(orderNo, userId);
         return R.ok("订单已取消");
     }
 
     /**
      * 确认收货
      * @param orderNo 订单号
+     * @param request HTTP请求
      * @return 确认结果
      */
     @Operation(summary = "确认收货", description = "确认收到商品")
     @PostMapping("/receive")
-    public R<?> receive(@RequestParam String orderNo) {
-        orderService.confirmReceive(orderNo);
+    public R<?> receive(@RequestParam String orderNo, HttpServletRequest request) {
+        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        orderService.confirmReceive(orderNo, userId);
         return R.ok("已确认收货");
     }
 
     /**
      * 申请退款
+     * @param orderNo 订单号
+     * @param body 请求体，reason 为退款原因
+     * @param request HTTP请求
+     * @return 退款结果
      */
     @Operation(summary = "申请退款", description = "对已付款或已发货订单申请退款")
     @PostMapping("/{orderNo}/refund")
-    public R<?> requestRefund(@PathVariable String orderNo, @RequestBody Map<String, String> body) {
-        // 记录退款申请，后续管理员审核
-        orderService.cancelOrder(orderNo); // 简化：直接取消并恢复库存
+    public R<?> requestRefund(@PathVariable String orderNo,
+                              @RequestBody(required = false) Map<String, String> body,
+                              HttpServletRequest request) {
+        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        String reason = body != null ? body.get("reason") : null;
+        orderService.requestRefund(orderNo, userId, reason);
         return R.ok("退款申请已提交");
     }
 
