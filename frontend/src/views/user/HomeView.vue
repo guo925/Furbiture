@@ -71,7 +71,7 @@ import { ArrowRight, Box, Service, Van } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import UserLayout from '../../components/UserLayout.vue'
 import ProductCard from '../../components/ProductCard.vue'
-import { productAPI } from '../../api'
+import { categoryAPI, productAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
 import { useCartStore } from '../../stores/cart'
 
@@ -105,7 +105,9 @@ onMounted(async () => {
 
 const loadCategories = async () => {
   try {
-    const response = await productAPI.getCategories()
+    // 分类列表由 categoryAPI 提供（GET /api/categories），返回扁平列表且含 status 字段。
+    // 此前误用了 productAPI.getCategories（该方法不存在），导致首页「主题市场」永久空白。
+    const response = await categoryAPI.getList()
     categories.value = (response.data.data || []).filter(item => item.status !== 0).slice(0, 9)
   } catch (error) {
     console.error('获取分类失败:', error)

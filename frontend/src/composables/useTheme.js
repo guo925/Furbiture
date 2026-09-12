@@ -16,14 +16,21 @@ export function useTheme() {
 
   /**
    * 应用主题到 DOM
+   *
+   * 需要同时设置两套标记，因为它们驱动的样式体系不同：
+   * - data-theme：项目自有令牌（design-tokens.css 的 --color-*）
+   * - dark 类：Element Plus 组件（EP 的暗色变量挂在 html.dark 下）
+   * 只设其一会出现"页面背景变深、EP 表格/弹窗仍是白色"的割裂。
    */
   function applyTheme(theme) {
+    const root = document.documentElement
     // 添加过渡标记，使颜色切换平滑
-    document.documentElement.setAttribute('data-theme-transition', '')
-    document.documentElement.setAttribute('data-theme', theme)
+    root.setAttribute('data-theme-transition', '')
+    root.setAttribute('data-theme', theme)
+    root.classList.toggle('dark', theme === 'dark')
     // 过渡完成后移除标记
     setTimeout(() => {
-      document.documentElement.removeAttribute('data-theme-transition')
+      root.removeAttribute('data-theme-transition')
     }, 400)
   }
 

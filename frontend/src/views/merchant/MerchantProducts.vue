@@ -29,7 +29,7 @@
         </div>
       </div>
 
-      <el-table :data="filteredProducts" row-key="id">
+      <el-table :data="filteredProducts" v-loading="loading" row-key="id">
         <el-table-column label="商品" min-width="320">
           <template #default="{ row }">
             <div class="goods-cell">
@@ -60,7 +60,7 @@
         </el-table-column>
       </el-table>
 
-      <el-empty v-if="!filteredProducts.length" description="暂无商品" />
+      <el-empty v-if="!loading && !filteredProducts.length" description="暂无商品" />
 
       <el-pagination
         v-if="total > 0"
@@ -124,6 +124,8 @@ import { useUserStore } from '../../stores/user'
 const router = useRouter()
 const userStore = useUserStore()
 
+/** 加载态：无此标记时，数据到达前表格为空会先闪一下"暂无商品" */
+const loading = ref(false)
 const products = ref([])
 const categories = ref([])
 const dialogVisible = ref(false)
@@ -172,9 +174,14 @@ function emptyProduct() {
 }
 
 const loadProducts = async () => {
-  const response = await merchantAPI.products.getList({ page: currentPage.value, size: pageSize.value })
-  products.value = response.data.data.records || []
-  total.value = response.data.data.total || 0
+  loading.value = true
+  try {
+    const response = await merchantAPI.products.getList({ page: currentPage.value, size: pageSize.value })
+    products.value = response.data.data.records || []
+    total.value = response.data.data.total || 0
+  } finally {
+    loading.value = false
+  }
 }
 
 const loadCategories = async () => {

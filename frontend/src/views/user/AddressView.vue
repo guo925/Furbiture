@@ -405,7 +405,7 @@ const copyToClipboard = async text => {
 .address-card button {
   border: 0;
   background: none;
-  color: #409eff;
+  color: var(--color-primary);
   cursor: pointer;
 }
 

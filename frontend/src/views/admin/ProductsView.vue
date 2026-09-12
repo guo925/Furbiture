@@ -43,18 +43,18 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="price" label="价格" width="120" sortable>
+        <el-table-column prop="price" label="价格" width="100" sortable>
           <template #default="{ row }">
             <span class="price-tag">¥{{ row.price }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="stock" label="库存" width="100" sortable>
+        <el-table-column prop="stock" label="库存" width="80" sortable>
           <template #default="{ row }">
             <span :class="row.stock < 10 ? 'text-danger' : ''">{{ row.stock }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="sales" label="销量" width="100" sortable />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="sales" label="销量" width="80" sortable />
+        <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
             <el-switch
               :model-value="row.status === 1"
@@ -65,7 +65,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button link type="danger" size="small" @click="handleDelete(row)">删除</el-button>

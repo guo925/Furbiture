@@ -164,7 +164,7 @@ const handleLogout = async () => {
 .logo-icon {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: var(--color-primary-gradient);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -201,7 +201,7 @@ const handleLogout = async () => {
 }
 
 .aside-menu .el-menu-item.is-active {
-  background: linear-gradient(135deg, #667eea, #764ba2) !important;
+  background: var(--color-primary-gradient) !important;
 }
 
 .aside-footer {
@@ -234,7 +234,7 @@ const handleLogout = async () => {
 }
 
 .header-left :deep(.el-breadcrumb__inner.is-link:hover) {
-  color: #667eea;
+  color: var(--color-primary);
 }
 
 .header-right {

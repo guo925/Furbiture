@@ -264,7 +264,7 @@ const logout = () => {
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #ff7a00, #ff2d00);
+  background: var(--color-primary-gradient);
   color: #fff;
   display: grid;
   place-items: center;

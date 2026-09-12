@@ -332,7 +332,7 @@ const timelineText = order => {
 
 .page-head a,
 .primary-link {
-  color: #409eff;
+  color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -402,7 +402,7 @@ const timelineText = order => {
 }
 
 .order-card button:hover {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .order-card-body {

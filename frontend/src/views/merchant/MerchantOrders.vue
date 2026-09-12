@@ -16,7 +16,7 @@
         </div>
       </div>
 
-      <el-table :data="filteredOrders" row-key="id">
+      <el-table :data="filteredOrders" v-loading="loading" row-key="id">
         <el-table-column label="订单信息" min-width="260">
           <template #default="{ row }">
             <div class="order-main">
@@ -44,7 +44,7 @@
         </el-table-column>
       </el-table>
 
-      <el-empty v-if="!filteredOrders.length" description="暂无订单" />
+      <el-empty v-if="!loading && !filteredOrders.length" description="暂无订单" />
 
       <el-pagination
         v-if="total > 0"
@@ -94,6 +94,8 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
+/** 加载态：无此标记时，数据到达前表格为空会先闪一下"暂无订单" */
+const loading = ref(false)
 const orders = ref([])
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -119,11 +121,16 @@ onMounted(async () => {
 })
 
 const loadOrders = async () => {
-  const params = { page: currentPage.value, size: pageSize.value }
-  if (statusFilter.value !== 'all') params.status = Number(statusFilter.value)
-  const response = await merchantAPI.orders.getList(params)
-  orders.value = response.data.data.records || []
-  total.value = response.data.data.total || 0
+  loading.value = true
+  try {
+    const params = { page: currentPage.value, size: pageSize.value }
+    if (statusFilter.value !== 'all') params.status = Number(statusFilter.value)
+    const response = await merchantAPI.orders.getList(params)
+    orders.value = response.data.data.records || []
+    total.value = response.data.data.total || 0
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleDetail = async orderNo => {

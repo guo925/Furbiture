@@ -17,7 +17,7 @@
     </div>
 
     <!-- 分类列表 -->
-    <el-table :data="categories" style="width: 100%">
+    <el-table :data="categories" v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column label="分类图标" width="100">
         <template #default="scope">
@@ -133,6 +133,8 @@ import { merchantAPI, fileAPI } from '../../api'
 import { Search, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+/** 加载态：无此标记时，数据到达前表格为空会先闪一下"暂无数据" */
+const loading = ref(false)
 const categories = ref([])
 const total = ref(0)
 const currentPage = ref(1)
@@ -164,6 +166,7 @@ onMounted(async () => {
 })
 
 const loadCategories = async () => {
+  loading.value = true
   try {
     const params = {
       page: currentPage.value,
@@ -175,13 +178,15 @@ const loadCategories = async () => {
     const response = await merchantAPI.categories.getList(params)
     categories.value = response.data.data.records
     total.value = response.data.data.total
-    
+
     // 获取所有顶级分类用于下拉选择
     const allCategories = await merchantAPI.categories.getList()
     parentCategories.value = allCategories.data.data.records.filter(c => c.parentId === 0 || !c.parentId)
   } catch (error) {
     console.error('获取分类失败:', error)
     ElMessage.error('获取分类失败')
+  } finally {
+    loading.value = false
   }
 }
 

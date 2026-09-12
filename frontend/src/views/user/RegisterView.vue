@@ -137,7 +137,7 @@ const resetForm = () => {
 }
 
 .el-form-item a {
-  color: #409eff;
+  color: var(--color-primary);
   text-decoration: none;
   margin-left: 5px;
 }

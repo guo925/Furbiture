@@ -117,12 +117,6 @@ const router = createRouter({
           name: 'AdminUsers',
           component: () => import('../views/admin/UsersView.vue'),
           meta: { title: '用户管理' }
-        },
-        {
-          path: 'file-upload-test',
-          name: 'AdminFileUploadTest',
-          component: () => import('../views/admin/FileUploadTest.vue'),
-          meta: { title: '文件上传测试' }
         }
       ]
     },

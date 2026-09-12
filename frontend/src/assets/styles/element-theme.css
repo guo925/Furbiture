@@ -1,0 +1,173 @@
+/* ============================================================
+   Element Plus 主题映射
+   ============================================================
+
+   为什么需要这个文件？
+   -------------------
+   项目的品牌主色定义在 design-tokens.css 的 --color-primary（橙色 #ff5000），
+   但 Element Plus 有自己独立的一套 CSS 变量 --el-*，默认渲染成蓝色 #409EFF。
+   两者互不相干，导致同一页面里出现"橙色自定义按钮 + 蓝色 EP 按钮"的割裂。
+
+   EP 的浅色梯度（light-3/5/7/8/9）是编译期由主色混合白色算出的静态值，
+   无法在运行时从 --color-primary 推导，因此必须显式列出。
+
+   梯度换算公式（与 EP 源码一致）：
+     light-N = (1 - N/10) × 主色 + (N/10) × 白色      ← 浅色模式
+     light-N = (1 - N/10) × 主色 + (N/10) × 黑色      ← 深色模式
+     dark-2  = 0.8 × 主色 + 0.2 × 黑色
+
+   加载顺序要求：本文件必须在 element-plus/dist/index.css 与
+   element-plus/theme-chalk/dark/css-vars.css 之后引入，否则会被后者覆盖。
+   ============================================================ */
+
+/* ============================================
+   浅色模式
+   ============================================ */
+
+:root {
+  /* ---- 主色：品牌橙 #ff5000 ---- */
+  --el-color-primary: #ff5000;
+  --el-color-primary-light-3: #ff854d;
+  --el-color-primary-light-5: #ffa880;
+  --el-color-primary-light-7: #ffcbb3;
+  --el-color-primary-light-8: #ffdccc;
+  --el-color-primary-light-9: #ffefe6;
+  --el-color-primary-dark-2: #cc4000;
+
+  /* ---- 语义色：与 --color-* 令牌保持一致 ---- */
+  --el-color-success: #22c55e;
+  --el-color-success-light-3: #64d68c;
+  --el-color-success-light-5: #90e3ae;
+  --el-color-success-light-7: #bdefcf;
+  --el-color-success-light-8: #d3f4df;
+  --el-color-success-light-9: #e9faef;
+  --el-color-success-dark-2: #1b9e4b;
+
+  --el-color-warning: #f59e0b;
+  --el-color-warning-light-3: #f8bb4f;
+  --el-color-warning-light-5: #facf85;
+  --el-color-warning-light-7: #fce2bb;
+  --el-color-warning-light-8: #fdecd3;
+  --el-color-warning-light-9: #fef5e7;
+  --el-color-warning-dark-2: #c47e09;
+
+  --el-color-danger: #ef4444;
+  --el-color-danger-light-3: #f37575;
+  --el-color-danger-light-5: #f7a2a2;
+  --el-color-danger-light-7: #fbcece;
+  --el-color-danger-light-8: #fcdada;
+  --el-color-danger-light-9: #fdecec;
+  --el-color-danger-dark-2: #bf3636;
+
+  --el-color-error: #ef4444;
+  --el-color-error-light-3: #f37575;
+  --el-color-error-light-5: #f7a2a2;
+  --el-color-error-light-7: #fbcece;
+  --el-color-error-light-8: #fcdada;
+  --el-color-error-light-9: #fdecec;
+  --el-color-error-dark-2: #bf3636;
+
+  --el-color-info: #3b82f6;
+  --el-color-info-light-3: #76a5f9;
+  --el-color-info-light-5: #9dc0fb;
+  --el-color-info-light-7: #c4dafd;
+  --el-color-info-light-8: #d8e6fe;
+  --el-color-info-light-9: #ebf3fe;
+  --el-color-info-dark-2: #2f68c5;
+
+  /* ---- 圆角：接入项目 --radius-* 令牌 ---- */
+  --el-border-radius-base: var(--radius-md);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: var(--radius-full);
+
+  /* ---- 字体：修复 App.vue 用 Arial 覆盖全局字体族的问题 ---- */
+  --el-font-family: var(--font-family);
+
+  /* ---- 文字颜色：接入 --color-text-* 令牌 ---- */
+  --el-text-color-primary: var(--color-text-primary);
+  --el-text-color-regular: var(--color-text-secondary);
+  --el-text-color-secondary: var(--color-text-muted);
+  --el-text-color-placeholder: var(--color-text-muted);
+  --el-text-color-disabled: var(--color-text-muted);
+
+  /* ---- 背景与边框：接入 --color-bg-* / --color-border 令牌 ---- */
+  --el-bg-color: var(--color-bg-secondary);
+  --el-bg-color-page: var(--color-bg-primary);
+  --el-bg-color-overlay: var(--color-bg-secondary);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-border-light);
+  --el-border-color-lighter: var(--color-border-light);
+  --el-border-color-extra-light: var(--color-border-light);
+  --el-fill-color-blank: var(--color-bg-secondary);
+}
+
+/* ============================================
+   深色模式
+   ============================================
+   EP 的暗色变量由 html.dark 类触发（不是项目的 data-theme）。
+   两者的作用对象不同：data-theme 驱动项目自有令牌，dark 类驱动 EP 组件。
+   useTheme 会同时设置两者。
+
+   注意：html.dark 选择器优先级高于 :root，因此此处必须显式重写，
+   否则深色模式下 EP 仍会使用上面那套浅色梯度。
+   ============================================ */
+
+html.dark {
+  /* ---- 主色：深色下提亮，与 --color-primary 的深色令牌一致 ---- */
+  --el-color-primary: #ff7a1a;
+  --el-color-primary-light-3: #b35512;
+  --el-color-primary-light-5: #803d0d;
+  --el-color-primary-light-7: #4d2508;
+  --el-color-primary-light-8: #331805;
+  --el-color-primary-light-9: #1a0c03;
+  --el-color-primary-dark-2: #ff944d;
+
+  --el-color-success: #4ade80;
+  --el-color-success-light-3: #37a760;
+  --el-color-success-light-5: #287844;
+  --el-color-success-light-7: #184a29;
+  --el-color-success-light-8: #10321b;
+  --el-color-success-light-9: #08190e;
+
+  --el-color-warning: #fbbf24;
+  --el-color-warning-light-3: #bc8f1b;
+  --el-color-warning-light-5: #866614;
+  --el-color-warning-light-7: #503d0c;
+  --el-color-warning-light-8: #362908;
+  --el-color-warning-light-9: #1b1404;
+
+  --el-color-danger: #f87171;
+  --el-color-danger-light-3: #ba5555;
+  --el-color-danger-light-5: #853d3d;
+  --el-color-danger-light-7: #4f2525;
+  --el-color-danger-light-8: #351818;
+  --el-color-danger-light-9: #1a0c0c;
+
+  --el-color-error: #f87171;
+  --el-color-error-light-3: #ba5555;
+  --el-color-error-light-5: #853d3d;
+  --el-color-error-light-7: #4f2525;
+  --el-color-error-light-8: #351818;
+  --el-color-error-light-9: #1a0c0c;
+
+  --el-color-info: #60a5fa;
+  --el-color-info-light-3: #487cbc;
+  --el-color-info-light-5: #335986;
+  --el-color-info-light-7: #1f3650;
+  --el-color-info-light-8: #142436;
+  --el-color-info-light-9: #0a121b;
+
+  /* ---- 背景与边框：跟随项目深色令牌 ---- */
+  --el-bg-color: var(--color-bg-secondary);
+  --el-bg-color-page: var(--color-bg-primary);
+  --el-bg-color-overlay: var(--color-bg-card);
+  --el-text-color-primary: var(--color-text-primary);
+  --el-text-color-regular: var(--color-text-secondary);
+  --el-text-color-secondary: var(--color-text-muted);
+  --el-text-color-placeholder: var(--color-text-muted);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-border-light);
+  --el-border-color-lighter: var(--color-border-light);
+  --el-border-color-extra-light: var(--color-border-light);
+  --el-fill-color-blank: var(--color-bg-secondary);
+}

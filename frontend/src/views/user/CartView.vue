@@ -18,8 +18,8 @@
       <div v-else class="cart-wrap">
         <div class="cart-toolbar">
           <el-checkbox :model-value="allChecked" :indeterminate="isIndeterminate" @change="toggleAll">全选</el-checkbox>
-          <button type="button" @click="clearSelected" :disabled="selectedIds.length === 0">删除选中</button>
-          <button type="button" @click="clearCart">清空购物车</button>
+          <button type="button" @click="clearSelected" :disabled="selectedIds.length === 0 || clearing">删除选中</button>
+          <button type="button" @click="clearCart" :disabled="clearing">清空购物车</button>
         </div>
 
         <div class="cart-list">
@@ -33,7 +33,7 @@
             <strong>¥{{ money(item.product?.price) }}</strong>
             <el-input-number v-model="item.quantity" :min="1" :max="99" @change="value => updateQuantity(item.id, value)" />
             <strong class="subtotal">¥{{ money((item.product?.price || 0) * (item.quantity || 0)) }}</strong>
-            <el-button :icon="Delete" text type="danger" @click="removeItem(item.id)">删除</el-button>
+            <el-button :icon="Delete" text type="danger" :loading="removingIds.includes(item.id)" @click="removeItem(item.id)">删除</el-button>
           </article>
         </div>
 
@@ -51,7 +51,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Delete } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import UserLayout from '../../components/UserLayout.vue'
 import { useUserStore } from '../../stores/user'
 import { useCartStore } from '../../stores/cart'
@@ -60,6 +60,10 @@ const router = useRouter()
 const userStore = useUserStore()
 const cartStore = useCartStore()
 const selectedIds = ref([])
+/** 单条删除的 loading 标记：只让被操作的那一行转圈，不阻塞整页 */
+const removingIds = ref([])
+/** 批量操作（删除选中 / 清空购物车）进行中标记，用于禁用按钮防重复点击 */
+const clearing = ref(false)
 const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
 
 const selectedItems = computed(() => cartStore.cartItems.filter(item => selectedIds.value.includes(item.id)))
@@ -91,37 +95,88 @@ const toggleItem = (id, checked) => {
 const updateQuantity = async (id, quantity) => {
   try {
     await cartStore.updateCartItem(id, quantity)
-    ElMessage.success('数量已更新')
+    // 不再弹成功提示：el-input-number 每次加减都会触发，弹提示会立刻刷屏
   } catch (error) {
     ElMessage.error(error.message || '更新失败')
+    // 接口失败时本地 quantity 已被 v-model 改过，重新拉取以服务端为准
+    await cartStore.getCartList()
   }
 }
 
 const removeItem = async (id) => {
   try {
+    await ElMessageBox.confirm('确定从购物车移除这件商品吗？', '移除商品', {
+      type: 'warning',
+      confirmButtonText: '移除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return // 用户点了取消
+  }
+
+  removingIds.value = [...removingIds.value, id]
+  try {
     await cartStore.removeCartItem(id)
     selectedIds.value = selectedIds.value.filter(itemId => itemId !== id)
-    ElMessage.success('已删除')
+    ElMessage.success('已移除')
   } catch (error) {
     ElMessage.error(error.message || '删除失败')
+  } finally {
+    removingIds.value = removingIds.value.filter(itemId => itemId !== id)
   }
 }
 
 const clearSelected = async () => {
-  for (const id of [...selectedIds.value]) {
-    await cartStore.removeCartItem(id)
+  const count = selectedIds.value.length
+  if (count === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `将移除选中的 ${count} 件商品，移除后需重新加入，确定继续吗？`,
+      '删除选中商品',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
   }
-  selectedIds.value = []
-  ElMessage.success('选中商品已删除')
+
+  clearing.value = true
+  try {
+    // 逐个删除是既有实现（后端未提供批量删除接口），这里补上整体失败提示，
+    // 避免中途失败时用户以为全部删完了
+    for (const id of [...selectedIds.value]) {
+      await cartStore.removeCartItem(id)
+    }
+    selectedIds.value = []
+    ElMessage.success('已删除选中商品')
+  } catch (error) {
+    ElMessage.error(error.message || '部分商品删除失败，请刷新后重试')
+    await cartStore.getCartList()
+  } finally {
+    clearing.value = false
+  }
 }
 
 const clearCart = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '将清空购物车中的全部商品，此操作不可恢复，确定继续吗？',
+      '清空购物车',
+      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  clearing.value = true
   try {
     await cartStore.clearCart()
     selectedIds.value = []
     ElMessage.success('购物车已清空')
   } catch (error) {
     ElMessage.error(error.message || '清空失败')
+  } finally {
+    clearing.value = false
   }
 }
 

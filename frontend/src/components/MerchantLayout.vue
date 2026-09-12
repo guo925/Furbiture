@@ -106,7 +106,7 @@ const logout = () => {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  background: linear-gradient(135deg, #ff7a1a, #ffb15d);
+  background: var(--color-primary-gradient);
   color: #fff;
   font-size: 20px;
   font-weight: 800;
@@ -153,7 +153,7 @@ const logout = () => {
 }
 
 .seller-nav-item.router-link-active {
-  box-shadow: inset 3px 0 0 #ff7a1a;
+  box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
 .seller-main {
