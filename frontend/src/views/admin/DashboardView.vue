@@ -2,7 +2,7 @@
   <div class="dashboard">
     <!-- 统计卡片 -->
     <el-row :gutter="20" class="stats-row">
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card" style="--card-color: #667eea">
           <div class="stat-icon"><el-icon :size="28"><Document /></el-icon></div>
           <div class="stat-info">
@@ -11,7 +11,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card" style="--card-color: #f093fb">
           <div class="stat-icon"><el-icon :size="28"><Clock /></el-icon></div>
           <div class="stat-info">
@@ -20,7 +20,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card" style="--card-color: #4facfe">
           <div class="stat-icon"><el-icon :size="28"><Money /></el-icon></div>
           <div class="stat-info">
@@ -29,7 +29,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card" style="--card-color: #43e97b">
           <div class="stat-icon"><el-icon :size="28"><User /></el-icon></div>
           <div class="stat-info">
@@ -41,7 +41,7 @@
     </el-row>
 
     <el-row :gutter="20">
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card" style="--card-color: #fa709a">
           <div class="stat-icon"><el-icon :size="28"><Money /></el-icon></div>
           <div class="stat-info">
@@ -50,7 +50,7 @@
           </div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card" style="--card-color: #fee140">
           <div class="stat-icon"><el-icon :size="28"><Goods /></el-icon></div>
           <div class="stat-info">
@@ -63,7 +63,7 @@
 
     <!-- 图表区域 -->
     <el-row :gutter="20" style="margin-top: 20px">
-      <el-col :span="16">
+      <el-col :xs="24" :md="16">
         <div class="chart-card">
           <div class="chart-header">
             <h3>销售趋势（近 7 天）</h3>
@@ -71,7 +71,7 @@
           <div ref="salesChartRef" class="chart-body"></div>
         </div>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :md="8">
         <div class="chart-card">
           <div class="chart-header">
             <h3>热销商品 TOP 5</h3>
@@ -102,6 +102,7 @@ import { Document, Clock, Money, User, Goods } from '@element-plus/icons-vue'
 
 const salesChartRef = ref(null)
 let chartInstance = null
+let chartResizeObserver = null
 
 const stats = reactive({
   totalOrderCount: 0, todayOrderCount: 0, totalSales: 0, todaySales: 0,
@@ -173,6 +174,20 @@ const renderChart = (dates, values) => {
       }
     }]
   })
+  observeChartResize()
+}
+
+/**
+ * 图表容器宽度会随「窗口跨断点」和「侧边栏折叠」变化，
+ * 这两种情况都不会触发 window.resize，所以监听元素本身尺寸更可靠。
+ * ECharts 的 canvas 一直贴合容器，resize 不会反向改变容器尺寸，不存在循环触发。
+ */
+const observeChartResize = () => {
+  if (chartResizeObserver || !salesChartRef.value) return
+  chartResizeObserver = new ResizeObserver(() => {
+    if (chartInstance && !chartInstance.isDisposed()) chartInstance.resize()
+  })
+  chartResizeObserver.observe(salesChartRef.value)
 }
 
 onMounted(async () => {
@@ -182,13 +197,13 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  chartResizeObserver?.disconnect()
+  chartResizeObserver = null
   if (chartInstance) chartInstance.dispose()
 })
 </script>
 
 <style scoped>
-.dashboard { max-width: 1400px; }
-
 .stats-row { margin-bottom: 0; }
 
 .stat-card {
@@ -313,5 +328,20 @@ onUnmounted(() => {
   font-size: 13px;
   color: #667eea;
   font-weight: 500;
+}
+
+/* ===== 响应式：断点取值见 composables/useBreakpoint.js ===== */
+
+/* 移动端：一列布局下卡片同步收窄，避免"一屏只放得下一张卡"。
+   图表高度不压缩：yAxis.name 靠 grid.top 的百分比（10%）预留绘制空间，
+   高度一压，预留量随之缩水，轴名会被画到画布外裁掉。 */
+@media (max-width: 640px) {
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <el-container class="admin-layout">
-    <!-- 侧边栏 -->
-    <el-aside :width="isCollapse ? '64px' : '220px'" class="admin-aside">
+    <!-- 侧边栏：桌面端（>1024px）固定显示；窄屏改用下方的抽屉，避免挤压内容区 -->
+    <el-aside v-if="!isNarrow" :width="isCollapse ? '64px' : '220px'" class="admin-aside">
       <div class="aside-header">
         <div class="logo-icon">F</div>
         <transition name="fade">
@@ -19,25 +19,9 @@
         router
         class="aside-menu"
       >
-        <el-menu-item index="/admin/dashboard">
-          <el-icon><DataAnalysis /></el-icon>
-          <template #title>控制台</template>
-        </el-menu-item>
-        <el-menu-item index="/admin/products">
-          <el-icon><Goods /></el-icon>
-          <template #title>商品管理</template>
-        </el-menu-item>
-        <el-menu-item index="/admin/categories">
-          <el-icon><Grid /></el-icon>
-          <template #title>分类管理</template>
-        </el-menu-item>
-        <el-menu-item index="/admin/orders">
-          <el-icon><Document /></el-icon>
-          <template #title>订单管理</template>
-        </el-menu-item>
-        <el-menu-item index="/admin/users">
-          <el-icon><User /></el-icon>
-          <template #title>用户管理</template>
+        <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <template #title>{{ item.label }}</template>
         </el-menu-item>
       </el-menu>
 
@@ -48,13 +32,46 @@
       </div>
     </el-aside>
 
+    <!-- 窄屏抽屉导航：菜单项与侧边栏复用同一份 navItems，只维护一处 -->
+    <el-drawer
+      v-model="drawerVisible"
+      direction="ltr"
+      size="220px"
+      :with-header="false"
+      class="admin-nav-drawer"
+      aria-label="导航菜单"
+    >
+      <div class="aside-header">
+        <div class="logo-icon">F</div>
+        <span class="logo-text">Furbiture 管理</span>
+      </div>
+      <el-menu
+        :default-active="activeMenu"
+        background-color="#1a1a2e"
+        text-color="#a0aec0"
+        active-text-color="#ffffff"
+        router
+        class="aside-menu"
+        @select="drawerVisible = false"
+      >
+        <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <template #title>{{ item.label }}</template>
+        </el-menu-item>
+      </el-menu>
+    </el-drawer>
+
     <!-- 主区域 -->
     <el-container>
       <!-- 顶部栏 -->
       <el-header class="admin-header">
         <div class="header-left">
+          <!-- 窄屏下侧边栏已收起，用汉堡按钮唤出抽屉导航 -->
+          <el-button v-if="isNarrow" text class="nav-toggle" aria-label="打开导航菜单" @click="drawerVisible = true">
+            <el-icon :size="20"><Menu /></el-icon>
+          </el-button>
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item>管理后台</el-breadcrumb-item>
+            <el-breadcrumb-item v-if="!isNarrow">管理后台</el-breadcrumb-item>
             <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
@@ -62,7 +79,7 @@
           <el-button circle @click="theme.toggleTheme()" :title="theme.isDark.value ? '切换亮色' : '切换深色'" style="margin-right: 12px">
             <el-icon><Sunny v-if="theme.isDark.value" /><Moon v-else /></el-icon>
           </el-button>
-          <el-tag type="success" size="small" effect="dark" style="margin-right: 16px">
+          <el-tag v-if="!isNarrow" type="success" size="small" effect="dark" style="margin-right: 16px">
             <el-icon><CircleCheck /></el-icon> 系统运行中
           </el-tag>
           <el-dropdown trigger="click">
@@ -97,35 +114,48 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   DataAnalysis, Goods, Grid, Document, User,
   Fold, Expand, ArrowDown, CircleCheck, Key, SwitchButton,
-  Sunny, Moon
+  Sunny, Moon, Menu
 } from '@element-plus/icons-vue'
 import { useTheme } from '../../composables/useTheme'
-
-const theme = useTheme()
+import { useBreakpoint } from '../../composables/useBreakpoint'
 import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '../../stores/user'
+
+const theme = useTheme()
+const { isNarrow } = useBreakpoint()
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const isCollapse = ref(false)
+const drawerVisible = ref(false)
 const username = computed(() => userStore.user?.username || '管理员')
 
 const activeMenu = computed(() => route.path)
 
-const titleMap = {
-  '/admin/dashboard': '控制台',
-  '/admin/products': '商品管理',
-  '/admin/categories': '分类管理',
-  '/admin/orders': '订单管理',
-  '/admin/users': '用户管理'
-}
-const currentTitle = computed(() => titleMap[route.path] || '')
+/**
+ * 导航菜单唯一数据源：侧边栏与窄屏抽屉两处模板共用，
+ * 面包屑标题也从这里取，避免"菜单改了忘了改标题"的经典漏改。
+ */
+const navItems = [
+  { path: '/admin/dashboard', label: '控制台', icon: DataAnalysis },
+  { path: '/admin/products', label: '商品管理', icon: Goods },
+  { path: '/admin/categories', label: '分类管理', icon: Grid },
+  { path: '/admin/orders', label: '订单管理', icon: Document },
+  { path: '/admin/users', label: '用户管理', icon: User }
+]
+
+const currentTitle = computed(() => navItems.find(item => item.path === route.path)?.label || '')
+
+// 窗口从窄屏拖回桌面时收起抽屉，否则抽屉会残留在已经显示侧边栏的界面上
+watch(isNarrow, (narrow) => {
+  if (!narrow) drawerVisible.value = false
+})
 
 const handleLogout = async () => {
   await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
@@ -228,6 +258,12 @@ const handleLogout = async () => {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+.nav-toggle {
+  margin-right: 8px;
+  padding: 0 6px;
+  color: #718096;
+}
+
 .header-left :deep(.el-breadcrumb__inner) {
   color: #718096;
   font-weight: 400;
@@ -276,5 +312,35 @@ const handleLogout = async () => {
 }
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
+}
+
+/* ===== 响应式：断点取值见 composables/useBreakpoint.js ===== */
+
+/* 平板及以下：内容区与顶栏内边距收窄，把宽度还给数据本身 */
+@media (max-width: 1024px) {
+  .admin-header {
+    padding: 0 12px;
+  }
+
+  .admin-main {
+    padding: 12px;
+  }
+}
+
+/* 移动端：顶栏挤不下完整用户名，只留头像与下拉箭头 */
+@media (max-width: 640px) {
+  .user-name {
+    display: none;
+  }
+}
+</style>
+
+<style>
+/* el-drawer 的 DOM 由 Element Plus 渲染，scoped 选择器命中不到，故单独放全局块。
+   选择器一律以 .admin-nav-drawer 起头，不会污染其他页面。 */
+.admin-nav-drawer .el-drawer__body {
+  padding: 0;
+  background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+  overflow: hidden;
 }
 </style>

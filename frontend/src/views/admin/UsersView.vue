@@ -7,7 +7,7 @@
 
     <!-- 搜索和筛选 -->
     <div class="filter-bar">
-      <el-input v-model="searchQuery" placeholder="搜索用户名或手机号" style="width: 300px; margin-right: 10px">
+      <el-input v-model="searchQuery" placeholder="搜索用户名或手机号" class="search-input">
         <template #append>
           <el-button @click="handleSearch"><el-icon><Search /></el-icon></el-button>
         </template>
@@ -18,9 +18,12 @@
     <!-- 用户列表 -->
     <el-table :data="users" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="username" label="用户名" />
-      <el-table-column prop="phone" label="手机号" />
-      <el-table-column prop="email" label="邮箱" />
+      <!-- 三个自适应列补 min-width：容器不够宽时让表格横向滚动，而不是把列压成省略号。
+           代价：表格最小宽度由 800px 抬到 990px，视口 <1300px 时本页会出现横向滚动条
+           （改动前是压缩列宽硬塞）。这是为消除窄屏"用户名只剩省略号"有意做的取舍。 -->
+      <el-table-column prop="username" label="用户名" min-width="120" />
+      <el-table-column prop="phone" label="手机号" min-width="130" />
+      <el-table-column prop="email" label="邮箱" min-width="180" />
       <el-table-column prop="role" label="角色" width="100">
         <template #default="scope">
           <el-tag v-if="scope.row.role === 'ADMIN'" type="danger">管理员</el-tag>
@@ -58,7 +61,7 @@
     </div>
 
     <!-- 添加/编辑用户对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" :width="isMobile ? '92%' : '50%'">
       <el-form :model="userForm" :rules="userRules" ref="userFormRef" label-width="100px">
         <el-form-item label="用户名" prop="username">
           <el-input v-model="userForm.username" />
@@ -89,7 +92,7 @@
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog v-model="passwordDialogVisible" title="重置密码" width="400px">
+    <el-dialog v-model="passwordDialogVisible" title="重置密码" :width="isMobile ? '92%' : '400px'">
       <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="100px">
         <el-form-item label="新密码" prop="password">
           <el-input v-model="passwordForm.password" type="password" show-password placeholder="请输入新密码" />
@@ -113,6 +116,10 @@ import { ref, onMounted, reactive } from 'vue'
 import { adminAPI } from '../../api'
 import { Search, Edit, Delete, Lock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useBreakpoint } from '../../composables/useBreakpoint'
+
+// 弹窗宽度需要随视口变化，故用断点状态而不是写死固定宽度
+const { isMobile } = useBreakpoint()
 
 const users = ref([])
 const total = ref(0)
@@ -340,6 +347,12 @@ const handlePasswordSave = async () => {
   margin-bottom: 20px;
   display: flex;
   align-items: center;
+  /* 原先靠 el-input 的内联 margin-right 撑开间距，内联样式媒体查询覆盖不了，改用 flex gap */
+  gap: 10px;
+}
+
+.search-input {
+  width: 300px;
 }
 
 .pagination {
@@ -350,5 +363,41 @@ const handlePasswordSave = async () => {
 
 .dialog-footer {
   text-align: right;
+}
+
+/* ===== 响应式：断点取值见 composables/useBreakpoint.js ===== */
+
+/* 平板及以下：容器内边距收窄，把宽度还给表格本身 */
+@media (max-width: 1024px) {
+  .admin-users {
+    padding: 12px;
+  }
+}
+
+/* 移动端：筛选栏竖向堆叠（搜索框占满整行），分页居中并允许换行。
+   表格列宽合计 990px，窄屏下由 el-table 自身横向滚动兜底，不做压缩。 */
+@media (max-width: 640px) {
+  .page-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .filter-bar {
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .pagination {
+    justify-content: center;
+  }
+
+  .pagination :deep(.el-pagination) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    justify-content: center;
+  }
 }
 </style>

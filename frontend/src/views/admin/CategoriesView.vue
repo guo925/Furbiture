@@ -50,7 +50,7 @@
     </div>
 
     <!-- 对话框 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑分类' : '新增分类'" width="500px" :close-on-click-modal="false" @closed="resetForm">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑分类' : '新增分类'" :width="isMobile ? '92%' : '500px'" :close-on-click-modal="false" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="分类名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入分类名称" />
@@ -90,6 +90,10 @@ import { ref, reactive, onMounted } from 'vue'
 import { adminAPI } from '../../api/modules/admin'
 import { Search, Plus, Folder } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useBreakpoint } from '../../composables/useBreakpoint'
+
+// 弹窗宽度需要随视口变化，故用断点状态而不是写死 500px
+const { isMobile } = useBreakpoint()
 
 const categories = ref([])
 const total = ref(0)
@@ -179,7 +183,6 @@ onMounted(() => loadData())
 </script>
 
 <style scoped>
-.admin-page { max-width: 1400px; }
 .page-toolbar {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
@@ -199,4 +202,35 @@ onMounted(() => loadData())
 .cat-name { font-size: 14px; font-weight: 500; color: #2d3748; }
 .text-muted { color: #a0aec0; font-size: 13px; }
 .table-footer { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+/* ===== 响应式：断点取值见 composables/useBreakpoint.js ===== */
+
+/* 平板及以下：卡片内边距收窄，把宽度还给表格本身 */
+@media (max-width: 1024px) {
+  .table-card {
+    padding: 12px;
+  }
+}
+
+/* 移动端：工具栏改为竖向堆叠（搜索框占满整行），分页居中并允许换行。
+   树形表格列宽合计 680px，窄屏下由 el-table 自身横向滚动兜底，不做压缩。 */
+@media (max-width: 640px) {
+  .toolbar-left {
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .table-footer {
+    justify-content: center;
+  }
+
+  .table-footer :deep(.el-pagination) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    justify-content: center;
+  }
+}
 </style>

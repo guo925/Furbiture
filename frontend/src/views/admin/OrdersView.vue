@@ -59,7 +59,7 @@
     </div>
 
     <!-- 订单详情抽屉 -->
-    <el-drawer v-model="drawerVisible" title="订单详情" size="480px">
+    <el-drawer v-model="drawerVisible" title="订单详情" :size="isMobile ? '88%' : '480px'">
       <template v-if="detailOrder">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="订单号">{{ detailOrder.orderNo }}</el-descriptions-item>
@@ -97,6 +97,10 @@ import { ref, onMounted } from 'vue'
 import { adminAPI } from '../../api/modules/admin'
 import { Search, Picture } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useBreakpoint } from '../../composables/useBreakpoint'
+
+// 详情抽屉需要随视口收窄，故用断点状态而不是写死 480px
+const { isMobile } = useBreakpoint()
 
 const orders = ref([]), total = ref(0), page = ref(1), size = ref(10), loading = ref(false)
 const searchOrderNo = ref(''), filterStatus = ref(null)
@@ -148,7 +152,6 @@ onMounted(() => loadData())
 </script>
 
 <style scoped>
-.admin-page { max-width: 1400px; }
 .page-toolbar {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
@@ -178,4 +181,35 @@ onMounted(() => loadData())
 .item-name { font-size: 14px; color: #2d3748; }
 .item-meta { font-size: 12px; color: #a0aec0; }
 .item-total { font-weight: 600; color: #2d3748; font-size: 14px; }
+
+/* ===== 响应式：断点取值见 composables/useBreakpoint.js ===== */
+
+/* 平板及以下：卡片内边距收窄，把宽度还给表格本身 */
+@media (max-width: 1024px) {
+  .table-card {
+    padding: 12px;
+  }
+}
+
+/* 移动端：工具栏改为竖向堆叠（搜索框占满整行），分页居中并允许换行。
+   表格列宽合计 930px，窄屏下由 el-table 自身横向滚动兜底，不做压缩。 */
+@media (max-width: 640px) {
+  .toolbar-left {
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .table-footer {
+    justify-content: center;
+  }
+
+  .table-footer :deep(.el-pagination) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    justify-content: center;
+  }
+}
 </style>

@@ -48,3 +48,7 @@ __pycache__/
 *.exe
 *.zip
 .claude/checks/
+
+### 浏览器自动化调试产物 ###
+# Playwright MCP 每次会话都会在这里写 console 日志与页面快照，属调试残留，不入库
+.playwright-mcp/
