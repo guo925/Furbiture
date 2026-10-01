@@ -31,7 +31,7 @@
 | 检查项 | 结果 | 命令 |
 |---|---|---|
 | 编译 | ✅ **BUILD SUCCESS**（135 个源文件，仅 2 条既有 `RedisConfig` 过期 API 警告） | `mvn -B -DskipTests clean compile` |
-| 测试 | ✅ **71 通过 / 0 失败 / 0 跳过** | `mvn -B test` |
+| 测试 | ✅ **83 通过 / 0 失败 / 0 跳过** | `mvn -B test` |
 | 覆盖率 | ⚠️ 行 **11%** / 分支 **8%**（JaCoCo 已接入，**刻意未设阈值**——设了必红） | `mvn -B test`（自动产出报告） |
 | 架构规则 | ✅ **ArchUnit 6 条规则全部启用**，0 违规 | `mvn -B test` |
 | 前端 lint | ✅ 退出码 0，零错误零警告 | `cd frontend && npm run lint` |
@@ -499,17 +499,41 @@ JS gzip                      791 kB      488 kB   −303 kB
 
 ## 九·补、本轮新增的测试与护栏
 
-**测试：44 → 49 → 61 → 64 → 70 → 71**（`mvn test` 全绿），新增的都做过**变异测试**（改坏必须变红）：
+**测试：44 → 49 → 61 → 64 → 70 → 71 → 83**（`mvn test` 全绿），新增的都做过**变异测试**（改坏必须变红）：
 
 | 测试 | 钉住的属性 | 变异验证 |
 |---|---|---|
 | `OrderTimeoutTaskTest`（5 个） | Redis 故障时**必须放行**（fail-open），不能因缓存故障让超时任务停摆 | ✅ 把 `return true` 改成 `return false` → 测试变红；去掉锁判断 → 另一个测试变红 |
 | `PasswordSerializationTest`（4 个） | 密码不随 JSON 序列化外泄 | ✅ 去掉 `@JsonProperty(WRITE_ONLY)` → 3 个变红 |
 | `OrderStatusEnumTest`（33 个） | 10 种非法状态迁移被拒绝 | ✅ |
-| `OrderServiceImplTest`（12 个） | 订单关键词**参数化不进 SQL 文本** / OR 块自带括号（防越权）/ 列表与计数条件逐字一致 / 分页上限钳制 / `COUNT` 映射为 `BigInteger` 也能取到值 | ✅ 去掉 OR 块外层 `and(...)` → 只有 `keywordOrBlockIsParenthesised` 变红（证明断言精确、未过度耦合）。含一条**负向对照**证明 `doesNotContain` 不是空断言 |
+| `OrderServiceImplTest`（24 个） | 订单关键词**参数化不进 SQL 文本** / OR 块自带括号（防越权）/ 列表与计数条件逐字一致 / 分页上限钳制 / `COUNT` 映射为 `BigInteger` 也能取到值 | ✅ 去掉 OR 块外层 `and(...)` → 只有 `keywordOrBlockIsParenthesised` 变红（证明断言精确、未过度耦合）。含一条**负向对照**证明 `doesNotContain` 不是空断言 |
 | `MerchantDashboardServiceImplTest`（3 个） | 低库存统计**含阈值边界**（`<=` 而非 `<`）且**只算在售商品** / 已下架用 `<>` 收敛 / 商品统计只查三次 | ✅ `.le` 改 `.lt` → 边界那条变红；删掉 `eq(status,1)` → 同一条变红 |
 | `AuthenticationUtilTest`（6 个） | 畸形 / 过期 / 结构不合法的 token **一律按未认证返回 null，绝不抛异常**（放行接口靠这条约定不 500） | ✅ 去掉 try/catch → 3 条异常路径各变红，3 条正常路径不受影响 |
 | `ArchitectureRulesTest`（6 条） | Controller 无事务 / 分层单向 / Mapper 是接口 … | ✅ |
+
+> ⚠️ **`verify(mock, never())` 极易写成空断言**（2026-10-01 靠变异测试才发现，务必引以为戒）：
+>
+> 本批次给 `adminChangeStatus` 补测试时，「已发货退款**不回补**库存」的用例写成：
+>
+> ```java
+> stubOrder(25L, DELIVERED.getCode(), "150.00");          // ← 没给订单设明细！
+> orderService.adminChangeStatus(25L, REFUNDED);
+> verify(productMapper, never()).restoreStockAndSales(anyLong(), anyInt());
+> ```
+>
+> 看似正确，实则**永远通过**：`restoreStock` 按订单明细逐条回补，明细为空时它直接
+> `if (items.isEmpty()) return;` —— `restoreStockAndSales` 根本不可能被调用，
+> `never()` 与代码对错无关。把 `releasingStock` 改成「一律回补」（即引入超卖缺陷），
+> **24 个用例竟然全绿**。
+>
+> **修正**：给「不回补」的用例也预置订单明细（`stubOneOrderItem()`），让错误实现真的会调到那个方法。
+> 修正后同样的变异被精确捕获（正是那两条变红）。该辅助方法用 `lenient()` 放宽，
+> 因为正确实现下这条桩确实用不到，而 Mockito 严格模式会把「未使用的桩」判为失败——
+> 它是测试数据准备，不是被验证的期望。
+>
+> **通用教训**：凡是 `verify(..., never())` / `doesNotContain` / `assertThat(x).isNull()`
+> 这类**否定式断言**，都要先问一句「什么样的错误实现会让它失败？」。答不上来就是空断言。
+> 唯一可靠的验证手段是变异测试——把实现改坏，看它是否变红。
 
 > ⚠️ **写 MyBatis-Plus Wrapper 断言的两个坑**（两个测试类各踩到一个）：
 >
