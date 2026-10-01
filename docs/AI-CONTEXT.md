@@ -159,7 +159,7 @@ Furbiture/
 │   ├── security/PasswordSerializationTest.java          # 密码不外泄：JSON 三种形态 + toString（5 个用例）
 │   ├── task/OrderTimeoutTaskTest.java                   # 超时任务多实例互斥（fail-open，5 个用例）
 │   ├── util/AuthenticationUtilTest.java                 # token 解析失败按未认证处理（6 个用例）
-│   ├── service/Impl/OrderServiceImplTest.java           # 订单查询条件：参数化 / OR 块括号 / 与计数口径一致（12 个）
+│   ├── service/Impl/OrderServiceImplTest.java           # 订单查询条件（参数化/OR 块括号/口径一致）+ 管理员强制流转的库存与时间戳（24 个）
 │   └── service/Impl/MerchantDashboardServiceImplTest.java # 低库存边界与在售过滤（3 个）
 └── frontend/src/
     ├── api/                      # request.js（axios + 401 闸门）+ modules/（11 个 API 模块）
