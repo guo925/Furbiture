@@ -37,10 +37,20 @@ CREATE TABLE `user` (
 CREATE TABLE `category` (
   `id` BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '分类ID',
   `name` VARCHAR(50) NOT NULL COMMENT '分类名称',
-  `parent_id` BIGINT DEFAULT 0 COMMENT '父分类ID',
+  -- parent_id 必须 NOT NULL DEFAULT 0：实体 Category.parentId 是 Long，
+  -- 为 NULL 时 CategoryServiceImpl.getCategoryTree() 里的 Collectors.groupingBy
+  -- 会抛 NPE，导致**全站分类树 500**（一次写坏、全站读崩）。
+  `parent_id` BIGINT NOT NULL DEFAULT 0 COMMENT '父分类ID，0 表示顶级分类',
   `level` INT DEFAULT 1 COMMENT '分类级别',
   `sort_order` INT DEFAULT 0 COMMENT '排序序号',
-  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+  -- icon / status 是 Category 实体声明了的字段，此前只存在于手工补过列的开发库，
+  -- 建表脚本里缺失 → 照本脚本全新建库会缺列，MyBatis-Plus 全字段查询直接报
+  -- Unknown column 'icon'，分类相关接口全部不可用。
+  `icon` VARCHAR(255) DEFAULT NULL COMMENT '分类图标',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0-禁用 1-启用',
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  -- 同一父级下不允许重名（迁移 v7 为存量库补同款唯一键）
+  UNIQUE KEY `uk_category_parent_name` (`parent_id`, `name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分类表';
 
 -- 商品表
@@ -57,8 +67,11 @@ CREATE TABLE `product` (
   `description` TEXT COMMENT '商品描述',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  INDEX `idx_category_id` (`category_id`),
-  INDEX `idx_status` (`status`)
+  -- idx_category_id 不再单独建：被 migration_v2 的 idx_product_category_status(category_id, status) 最左前缀覆盖
+  INDEX `idx_status` (`status`),
+  -- 数据完整性：价格与库存不允许为负（迁移 v7 为存量库补同款 CHECK）
+  CONSTRAINT `chk_product_price` CHECK (`price` >= 0),
+  CONSTRAINT `chk_product_stock` CHECK (`stock` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品表';
 
 -- 商品图片表
@@ -105,7 +118,8 @@ CREATE TABLE `cart` (
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   UNIQUE KEY `uk_user_product` (`user_id`, `product_id`),
-  INDEX `idx_user_id` (`user_id`)
+  -- idx_user_id 不再单独建：被 uk_user_product 最左前缀覆盖
+  CONSTRAINT `chk_cart_quantity` CHECK (`quantity` > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='购物车表';
 
 -- 订单表
@@ -121,9 +135,11 @@ CREATE TABLE `order` (
   `finish_time` DATETIME COMMENT '完成时间',
   `cancel_time` DATETIME COMMENT '取消时间',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  INDEX `idx_user_id` (`user_id`),
-  INDEX `idx_order_no` (`order_no`),
-  INDEX `idx_status` (`status`)
+  -- idx_user_id 不再单独建：被 migration_v2 的 idx_order_user_status(user_id, status) 最左前缀覆盖
+  -- idx_order_no 不再单独建：与 UNIQUE(order_no) 完全重复
+  INDEX `idx_status` (`status`),
+  INDEX `idx_pay_time` (`pay_time`),
+  CONSTRAINT `chk_order_total_amount` CHECK (`total_amount` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单表';
 
 -- 订单项表
@@ -135,8 +151,13 @@ CREATE TABLE `order_item` (
   `product_image` VARCHAR(255) COMMENT '商品图片',
   `price` DECIMAL(10,2) NOT NULL COMMENT '商品价格',
   `quantity` INT NOT NULL COMMENT '商品数量',
-  INDEX `idx_order_id` (`order_id`),
-  INDEX `idx_product_id` (`product_id`)
+  -- 索引名与 migration_v2 保持一致，避免全新部署时 v2 再建一份重复索引
+  INDEX `idx_order_item_order` (`order_id`),
+  INDEX `idx_order_item_product` (`product_id`),
+  -- 数据完整性：数量为正；订单项不得悬挂（迁移 v7 为存量库补同款约束）
+  CONSTRAINT `chk_order_item_quantity` CHECK (`quantity` > 0),
+  CONSTRAINT `fk_order_item_order`   FOREIGN KEY (`order_id`)   REFERENCES `order` (`id`)   ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `fk_order_item_product` FOREIGN KEY (`product_id`) REFERENCES `product` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单项表';
 
 -- ============================================

@@ -3,7 +3,9 @@ package com.gjx.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.gjx.entity.Order;
+import com.gjx.entity.OrderItem;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -69,12 +71,53 @@ public interface IOrderService extends IService<Order> {
     void cancelTimeoutOrder(Long orderId);
     
     /**
-     * 获取用户订单列表
-     * @param userId 用户ID
-     * @param status 订单状态
-     * @return 订单列表
+     * 分页获取用户订单列表
+     * <p>
+     * 原 listByUserId 会把该用户全部订单一次性查出来，订单量大时既有全表扫描风险，
+     * 又让调用方在循环里逐单查明细（N+1）。改为分页后单次返回量有上限。
+     *
+     * <p>关键词与日期区间同样在服务端过滤：若留在调用方做，筛选只会作用于"当前这一页"，
+     * 用户看到的结果会随翻页而变（同一条件在不同页命中不同订单）。
+     *
+     * @param userId    用户ID
+     * @param statuses  订单状态集合（可选）。用集合而非单值，是为了让「退款/售后」这类
+     *                  一个页签覆盖多个状态（4 已取消 + 5 已退款）的场景也能走服务端筛选
+     * @param keyword   商品名称 / 订单号关键词（可选），命中其一即可
+     * @param startDate 下单开始日期 yyyy-MM-dd（可选）
+     * @param endDate   下单结束日期 yyyy-MM-dd（可选，含当天）
+     * @param page      页码，从 1 开始；为空或非法时按 1 处理
+     * @param size      每页大小；为空或非法时使用默认值，且不超过上限
+     * @return 订单分页结果
      */
-    List<Order> listByUserId(Long userId, Integer status);
+    Page<Order> pageByUserId(Long userId, List<Integer> statuses, String keyword,
+                            String startDate, String endDate, Integer page, Integer size);
+
+    /**
+     * 统计用户各状态订单数量
+     * <p>
+     * 供订单页签角标使用。必须与 {@link #pageByUserId} 用同一套过滤条件（归属 + 关键词 + 日期），
+     * 否则角标数字与列表内容会对不上——同一批筛选条件下，两者必须始终自洽。
+     *
+     * <p>返回 Map 而非 VO：状态码由 {@code OrderStatusEnum} 定义且可能增加，
+     * 用「状态码 → 数量」的映射可以新增状态而不动签名；缺失的状态码表示数量为 0。
+     *
+     * @param userId    用户ID
+     * @param keyword   商品名称 / 订单号关键词（可选）
+     * @param startDate 下单开始日期 yyyy-MM-dd（可选）
+     * @param endDate   下单结束日期 yyyy-MM-dd（可选，含当天）
+     * @return key 为订单状态码，value 为该状态订单数；无订单的状态码不会出现在 key 中
+     */
+    Map<Integer, Long> countByStatus(Long userId, String keyword, String startDate, String endDate);
+
+    /**
+     * 批量查询订单明细并按订单ID分组
+     * <p>
+     * 供订单列表接口一次取回整页订单的明细，避免在循环中逐单查询（N+1）。
+     *
+     * @param orderIds 订单ID集合
+     * @return key 为订单ID，value 为该订单的明细列表；无明细的订单不会出现在 key 中
+     */
+    Map<Long, List<OrderItem>> getOrderItemsByOrderIds(List<Long> orderIds);
     
     /**
      * 根据订单号获取订单
@@ -105,9 +148,9 @@ public interface IOrderService extends IService<Order> {
     
     /**
      * 获取今日销售额
-     * @return 今日销售额
+     * @return 今日销售额（无数据时为 BigDecimal.ZERO，绝不为 null）
      */
-    double getTodaySales();
+    BigDecimal getTodaySales();
     
     /**
      * 统计总订单数
@@ -117,16 +160,16 @@ public interface IOrderService extends IService<Order> {
     
     /**
      * 获取总销售额
-     * @return 总销售额
+     * @return 总销售额（无数据时为 BigDecimal.ZERO，绝不为 null）
      */
-    double getTotalSales();
+    BigDecimal getTotalSales();
     
     /**
      * 获取指定日期的销售额
      * @param date 日期（格式：yyyy-MM-dd）
-     * @return 销售额
+     * @return 销售额（无数据时为 BigDecimal.ZERO，绝不为 null）
      */
-    double getSalesByDate(String date);
+    BigDecimal getSalesByDate(String date);
     
     /**
      * 统计指定日期的订单数

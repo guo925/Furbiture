@@ -28,11 +28,7 @@ export const useUserStore = defineStore('user', () => {
   const login = async (username, password) => {
     try {
       const response = await authAPI.login({ username, password })
-      
-      // 调试：打印响应数据
-      console.log('登录响应:', response)
-      console.log('response.data:', response.data)
-      
+
       // 检查业务响应码（后端成功返回code=200）
       if (response.data && response.data.code !== 200) {
         throw new Error(response.data.msg || '登录失败')
@@ -45,9 +41,7 @@ export const useUserStore = defineStore('user', () => {
       } else if (response.data && response.data.token) {
         resultData = response.data
       }
-      
-      console.log('解析后的数据:', resultData)
-      
+
       // 检查返回数据
       if (!resultData) {
         throw new Error('登录返回数据为空')
@@ -65,7 +59,7 @@ export const useUserStore = defineStore('user', () => {
       localStorage.setItem(USER_KEY, JSON.stringify(resultData.user))
       return resultData
     } catch (error) {
-      console.error('登录错误:', error)
+      console.error('登录错误:', error?.message)
       if (error.response?.data) {
         throw new Error(error.response.data.msg || error.response.data.message || '登录失败')
       } else {

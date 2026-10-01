@@ -4,11 +4,11 @@ import com.gjx.annotation.OperationLog;
 import com.gjx.mapper.OperationLogMapper;
 import com.gjx.util.AuthenticationUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -21,10 +21,12 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @Slf4j
 @Aspect
 @Component
+@RequiredArgsConstructor
 public class OperationLogAspect {
 
-    @Autowired
-    private OperationLogMapper operationLogMapper;
+    private final AuthenticationUtil authUtil;
+
+    private final OperationLogMapper operationLogMapper;
 
     @Around("@annotation(opLog)")
     public Object around(ProceedingJoinPoint joinPoint, OperationLog opLog) throws Throwable {
@@ -41,9 +43,9 @@ public class OperationLogAspect {
             entity.setIp(request.getRemoteAddr());
 
             try {
-                Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+                Long userId = authUtil.getUserIdFromRequest(request);
                 entity.setUserId(userId);
-                entity.setUsername(AuthenticationUtil.getUsernameFromRequest(request));
+                entity.setUsername(authUtil.getUsernameFromRequest(request));
             } catch (Exception ignored) {
                 // 未登录操作不记录 userId
             }

@@ -1,13 +1,15 @@
 package com.gjx.controller.user;
 
 import com.gjx.common.R;
+import com.gjx.dto.request.CreateReviewRequest;
 import com.gjx.entity.Review;
 import com.gjx.service.IReviewService;
 import com.gjx.util.AuthenticationUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -18,10 +20,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 @Tag(name = "商品评价", description = "商品评价相关接口")
+@RequiredArgsConstructor
 public class ReviewController {
 
-    @Autowired
-    private IReviewService reviewService;
+    private final AuthenticationUtil authUtil;
+
+    private final IReviewService reviewService;
 
     @Operation(summary = "获取商品评价列表")
     @GetMapping("/products/{productId}/reviews")
@@ -42,15 +46,12 @@ public class ReviewController {
 
     @Operation(summary = "创建评价")
     @PostMapping("/reviews")
-    public R<?> createReview(@RequestBody Map<String, Object> body, HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
-        Long productId = Long.valueOf(body.get("productId").toString());
-        Long orderId = body.get("orderId") != null ? Long.valueOf(body.get("orderId").toString()) : null;
-        Integer rating = Integer.valueOf(body.get("rating").toString());
-        String content = (String) body.get("content");
-        String images = (String) body.get("images");
-
-        reviewService.createReview(userId, productId, orderId, rating, content, images);
+    public R<?> createReview(@Valid @RequestBody CreateReviewRequest reviewRequest, HttpServletRequest request) {
+        // 旧写法用 Map 接参并对 productId / rating 调 .toString()，缺字段直接 NPE；
+        // 改为 DTO + @Valid 后由统一异常处理器返回明确的参数错误
+        Long userId = authUtil.getUserIdFromRequest(request);
+        reviewService.createReview(userId, reviewRequest.getProductId(), reviewRequest.getOrderId(),
+                reviewRequest.getRating(), reviewRequest.getContent(), reviewRequest.getImages());
         return R.ok("评价成功");
     }
 }

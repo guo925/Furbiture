@@ -101,4 +101,40 @@ public enum OrderStatusEnum {
     public boolean canConfirmReceive() {
         return this == DELIVERED;
     }
+
+    /**
+     * 判断当前状态是否允许迁移到目标状态。
+     *
+     * <p><b>为什么需要它：</b>订单状态不能"想改就改"。若只校验"目标值在枚举内"，
+     * 管理员仍可把「已取消」改成「已付款」——这会凭空制造出一笔从未发生过的交易，
+     * 破坏按 status=PAID 统计的销售额与对账。
+     *
+     * <p>允许的迁移（正向流转 + 退款支线）：
+     * <pre>
+     * 待付款(0) → 已付款(1) | 已取消(4)
+     * 已付款(1) → 已发货(2) | 已退款(5)
+     * 已发货(2) → 已完成(3) | 已退款(5)
+     * 已完成(3) → 已退款(5)
+     * 已取消(4) / 已退款(5) → 终态，不可再流转
+     * </pre>
+     *
+     * <p><b>关于终态：</b>「已取消」「已退款」被设计为终态。如果确实需要纠正一笔错误取消，
+     * 不要放宽这里的规则，而应该走一个**独立的、带审计日志的**纠错操作——
+     * 否则任何误操作都能无声地改写历史交易。
+     *
+     * @param target 目标状态
+     * @return 允许迁移返回 true
+     */
+    public boolean canTransitionTo(OrderStatusEnum target) {
+        if (target == null) {
+            return false;
+        }
+        return switch (this) {
+            case PENDING_PAYMENT -> target == PAID || target == CANCELLED;
+            case PAID -> target == DELIVERED || target == REFUNDED;
+            case DELIVERED -> target == COMPLETED || target == REFUNDED;
+            case COMPLETED -> target == REFUNDED;
+            case CANCELLED, REFUNDED -> false;   // 终态
+        };
+    }
 }

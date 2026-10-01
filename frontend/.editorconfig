@@ -1,0 +1,29 @@
+# EditorConfig 统一编辑器行为（缩进 / 换行 / 编码）
+# 详见 https://editorconfig.org
+#
+# 注意：本文件位于 frontend/，只对该目录生效；下面的 [*.java] 段是
+# 按仓库级约定预留的（Java 4 空格）。若要真正覆盖后端源码，
+# 需在仓库根目录再放一份 .editorconfig（本次改动范围限定在 frontend/，故未创建）。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Vue / JS / TS / JSON / CSS —— 前端统一 2 空格
+[*.{js,mjs,cjs,vue,json,css,scss,html,yml,yaml}]
+indent_size = 2
+
+# Markdown 里缩进常常是内容的一部分，不要自动去尾空格
+[*.md]
+trim_trailing_whitespace = false
+
+# Java —— 4 空格（见文件头说明：在 frontend/ 下不会实际命中 Java 文件）
+[*.java]
+indent_style = space
+indent_size = 4

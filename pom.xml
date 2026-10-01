@@ -27,6 +27,11 @@
         <jjwt.version>0.12.6</jjwt.version>
         <lombok.version>1.18.36</lombok.version>
         <springdoc.version>2.6.0</springdoc.version>
+
+        <!-- 架构守护：把 CLAUDE.md 里的分层"散文规范"变成可执行断言 -->
+        <archunit.version>1.3.0</archunit.version>
+        <!-- 覆盖率度量。注意：当前仅度量、未设阈值——覆盖率上去之前设阈值会让构建必红 -->
+        <jacoco.version>0.8.12</jacoco.version>
     </properties>
 
     <dependencies>
@@ -46,6 +51,14 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Lettuce 连接池：application-*.yml 里的 spring.data.redis.lettuce.pool.*
+             只有在 classpath 存在 commons-pool2 时才会被 Spring Boot 应用；
+             缺失时这些参数被静默忽略，实际退化为单条共享连接。 -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
         </dependency>
 
         <!-- WebSocket -->
@@ -139,6 +152,14 @@
                 </exclusion>
             </exclusions>
         </dependency>
+
+        <!-- ArchUnit：架构规则测试（仅测试期使用，不进产物） -->
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>${archunit.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -172,6 +193,38 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+
+            <!--
+                JaCoCo 覆盖率度量。
+
+                ⚠️ 刻意【不设】覆盖率阈值（check 目标）：
+                本项目测试几乎为零覆盖，一旦设阈值，`mvn verify` / CI 会当场变红，
+                反而逼着人加 `-Djacoco.skip=true` 绕过，度量就废了。
+                正确顺序是：先让数字可见 → 补测试把数字做上去 → 最后再启用阈值收口。
+
+                prepare-agent 绑定到 initialize：任何 `mvn test` 都会自动采集执行数据；
+                report 绑定到 test 阶段：跑完测试顺手产出报告，不需要额外敲 jacoco:report。
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

@@ -1,11 +1,13 @@
 package com.gjx.controller.admin;
 
 import com.gjx.common.R;
+import com.gjx.dto.request.ProductSpecRequest;
 import com.gjx.entity.ProductSpec;
 import com.gjx.service.IProductSpecService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,10 +18,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/product-specs")
 @Tag(name = "管理员商品规格管理", description = "管理员商品规格管理相关接口")
+@RequiredArgsConstructor
 public class AdminProductSpecController {
 
-    @Autowired
-    private IProductSpecService productSpecService;
+    private final IProductSpecService productSpecService;
 
     /**
      * 根据商品ID获取规格列表
@@ -40,23 +42,35 @@ public class AdminProductSpecController {
      */
     @Operation(summary = "添加商品规格", description = "为商品添加规格")
     @PostMapping
-    public R<?> add(@RequestBody ProductSpec productSpec) {
-        productSpecService.save(productSpec);
+    public R<?> add(@Valid @RequestBody ProductSpecRequest request) {
+        productSpecService.save(toEntity(request));
         return R.ok("添加成功");
     }
 
     /**
      * 更新商品规格
      * @param id 规格ID
-     * @param productSpec 商品规格信息
+     * @param request 商品规格信息（DTO）
      * @return 更新结果
      */
     @Operation(summary = "更新商品规格", description = "更新商品规格信息")
     @PutMapping("/{id}")
-    public R<?> update(@PathVariable Long id, @RequestBody ProductSpec productSpec) {
+    public R<?> update(@PathVariable Long id, @Valid @RequestBody ProductSpecRequest request) {
+        ProductSpec productSpec = toEntity(request);
         productSpec.setId(id);
         productSpecService.updateById(productSpec);
         return R.ok("更新成功");
+    }
+
+    /**
+     * DTO → 实体映射，只映射允许客户端提交的字段（id 由路径参数决定）
+     */
+    private ProductSpec toEntity(ProductSpecRequest request) {
+        ProductSpec productSpec = new ProductSpec();
+        productSpec.setProductId(request.getProductId());
+        productSpec.setSpecName(request.getSpecName());
+        productSpec.setSpecValue(request.getSpecValue());
+        return productSpec;
     }
 
     /**

@@ -4,6 +4,7 @@ import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.gjx.common.BusinessException;
 import com.gjx.common.R;
+import com.gjx.common.ResultCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
@@ -70,18 +71,18 @@ public class FileController {
     @PostMapping("/upload")
     public R<?> upload(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
-            return R.error("请选择要上传的文件");
+            return R.error(ResultCode.PARAM_ERROR, "请选择要上传的文件");
         }
 
         String suffix = getFileSuffix(file.getOriginalFilename());
         if (!ALLOWED_EXTENSIONS.contains(suffix)) {
-            return R.error("仅支持上传 " + String.join("/", ALLOWED_EXTENSIONS) + " 格式的图片");
+            return R.error(ResultCode.PARAM_ERROR, "仅支持上传 " + String.join("/", ALLOWED_EXTENSIONS) + " 格式的图片");
         }
         // 必须先判 null：Set.of(...) 生成的是不可变集合，其 contains(null) 会抛 NPE，
         // 而 multipart 分片未携带 Content-Type 时 getContentType() 恰好返回 null
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
-            return R.error("文件内容类型不合法");
+            return R.error(ResultCode.PARAM_ERROR, "文件内容类型不合法");
         }
 
         try {
@@ -121,7 +122,7 @@ public class FileController {
 
         Path target = uploadPath.resolve(fileName).normalize();
         if (!target.startsWith(uploadPath)) {
-            return R.error("非法文件名");
+            return R.error(ResultCode.PARAM_ERROR, "非法文件名");
         }
 
         file.transferTo(target);

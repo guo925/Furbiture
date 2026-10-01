@@ -3,31 +3,61 @@ package com.gjx.service.Impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.gjx.common.BusinessException;
+import com.gjx.dto.response.CartItemVO;
 import com.gjx.entity.Cart;
 import com.gjx.entity.Product;
 import com.gjx.mapper.CartMapper;
 import com.gjx.mapper.ProductMapper;
 import com.gjx.service.ICartService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 购物车服务实现类
  */
 @Service
+@RequiredArgsConstructor
 public class CartServiceImpl extends ServiceImpl<CartMapper, Cart> implements ICartService {
 
-    @Autowired
-    private ProductMapper productMapper;
+    private final ProductMapper productMapper;
 
     @Override
-    public List<Cart> listByUserId(Long userId) {
+    public List<CartItemVO> listByUserId(Long userId) {
+        // 归属条件下沉进 WHERE：只查当前用户自己的购物车行
         LambdaQueryWrapper<Cart> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Cart::getUserId, userId);
         queryWrapper.orderByDesc(Cart::getCreateTime);
-        return list(queryWrapper);
+        List<Cart> carts = list(queryWrapper);
+
+        // 空购物车直接返回，省掉一次无意义的商品查询
+        if (carts.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 一次批量查商品（而非在循环里逐条查），这是消灭 N+1 的关键：
+        // 20 件购物车从「1(购物车) + 20(商品)」次查询降为「1 + 1」次
+        Set<Long> productIds = carts.stream()
+                .map(Cart::getProductId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Product> productMap = productIds.isEmpty()
+                ? Collections.emptyMap()
+                : productMapper.selectBatchIds(productIds).stream()
+                        .collect(Collectors.toMap(Product::getId, Function.identity()));
+
+        // 商品可能已被删除（批量查不到）——此时 product 为 null，
+        // 前端按「商品已下架」兜底展示，而不是让整个购物车列表报错
+        return carts.stream()
+                .map(cart -> CartItemVO.of(cart, productMap.get(cart.getProductId())))
+                .collect(Collectors.toList());
     }
 
     @Override

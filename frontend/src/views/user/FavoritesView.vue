@@ -12,7 +12,7 @@
 
       <div v-else-if="favorites.length" class="fav-grid">
         <article v-for="fav in favorites" :key="fav.id" class="fav-card">
-          <img :src="fav.productImage || fallbackImage" :alt="fav.productName" @click="goToProduct(fav.productId)">
+          <img :src="fav.productImage || fallbackImage" :alt="fav.productName" loading="lazy" @click="goToProduct(fav.productId)">
           <div class="fav-info">
             <router-link :to="`/product/${fav.productId}`">{{ fav.productName }}</router-link>
             <strong>¥{{ money(fav.productPrice) }}</strong>
@@ -45,15 +45,16 @@ import { ShoppingCart, Delete } from '@element-plus/icons-vue'
 import UserLayout from '../../components/UserLayout.vue'
 import { useUserStore } from '../../stores/user'
 import { useCartStore } from '../../stores/cart'
-import axios from 'axios'
-import request from '../../api/request'
+import { favoriteAPI } from '../../api/modules/favorite'
+import { FALLBACK_IMAGE } from '../../constants/images'
+import { money } from '../../utils/format'
 
 const router = useRouter()
 const userStore = useUserStore()
 const cartStore = useCartStore()
 const favorites = ref([])
 const loading = ref(false)
-const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
+const fallbackImage = FALLBACK_IMAGE
 
 onMounted(async () => {
   if (!userStore.isAuthenticated) { router.push('/login'); return }
@@ -63,9 +64,9 @@ onMounted(async () => {
 const loadFavorites = async () => {
   loading.value = true
   try {
-    const res = await request.get('/favorites')
+    const res = await favoriteAPI.getList()
     favorites.value = res.data.data || []
-  } catch (e) {
+  } catch {
     ElMessage.error('获取收藏列表失败')
   } finally {
     loading.value = false
@@ -85,15 +86,13 @@ const addToCart = async (productId) => {
 
 const removeFav = async (fav) => {
   try {
-    await request.post(`/favorites/${fav.productId}`)
+    await favoriteAPI.toggle(fav.productId)
     favorites.value = favorites.value.filter(f => f.id !== fav.id)
     ElMessage.success('已取消收藏')
-  } catch (e) {
+  } catch {
     ElMessage.error('操作失败')
   }
 }
-
-const money = (v) => Number(v || 0).toFixed(2)
 </script>
 
 <style scoped>

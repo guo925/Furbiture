@@ -68,6 +68,9 @@ public class SecurityConfig {
                                 "/actuator/info"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasAuthority(UserRoleEnum.ADMIN.getCode())
+                        // 注意：分类的写操作已收归 /api/admin/categories（ADMIN）。
+                        // 商家端 /api/merchant/categories 只保留 GET 只读查询，
+                        // 但仍必须持 MERCHANT 身份，**不要**把它加进上面的放行清单。
                         .requestMatchers("/api/merchant/**").hasAuthority(UserRoleEnum.MERCHANT.getCode())
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()

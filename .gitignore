@@ -52,3 +52,10 @@ __pycache__/
 ### 浏览器自动化调试产物 ###
 # Playwright MCP 每次会话都会在这里写 console 日志与页面快照，属调试残留，不入库
 .playwright-mcp/
+
+### 编辑器插件产物 ###
+# .github/modernize/ 是 IDE 的 Java 升级插件写出的运行残留（logs/、hooks/*.json、
+# hooks/scripts/），可能含本机绝对路径等本地信息，与项目本身无关，绝不入库。
+# 它原本就未被跟踪（其内部另有一个 .gitignore 写 **/*），这里再加一道显式防线，
+# 避免那个内部 .gitignore 被删掉后残留被误提交。
+.github/modernize/

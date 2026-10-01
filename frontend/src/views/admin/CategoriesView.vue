@@ -89,8 +89,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { adminAPI } from '../../api/modules/admin'
 import { Search, Plus, Folder } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useBreakpoint } from '../../composables/useBreakpoint'
+import { confirm } from '../../composables/useConfirm'
 
 // 弹窗宽度需要随视口变化，故用断点状态而不是写死 500px
 const { isMobile } = useBreakpoint()
@@ -162,7 +163,7 @@ const handleSave = async () => {
 }
 
 const handleDelete = async (row) => {
-  await ElMessageBox.confirm(`确定删除分类「${row.name}」吗？`, '删除确认', { type: 'warning' })
+  if (!await confirm(`确定删除分类「${row.name}」吗？`, '删除确认')) return
   await adminAPI.categories.delete(row.id)
   ElMessage.success('删除成功')
   loadData()

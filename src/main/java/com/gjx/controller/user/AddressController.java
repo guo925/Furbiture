@@ -1,17 +1,16 @@
 package com.gjx.controller.user;
 
 import com.gjx.common.R;
-import com.gjx.common.ResultCode;
+import com.gjx.dto.request.AddressRequest;
 import com.gjx.entity.Address;
 import com.gjx.service.IAddressService;
 import com.gjx.util.AuthenticationUtil;
-import com.gjx.util.ValidationUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,10 +21,12 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/addresses")
 @Tag(name = "地址管理", description = "地址相关接口")
+@RequiredArgsConstructor
 public class AddressController {
 
-    @Autowired
-    private IAddressService addressService;
+    private final AuthenticationUtil authUtil;
+
+    private final IAddressService addressService;
 
     /**
      * 获取用户地址列表
@@ -35,65 +36,41 @@ public class AddressController {
     @Operation(summary = "获取用户地址列表", description = "获取当前用户的收货地址列表")
     @GetMapping
     public R<List<Address>> list(HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        Long userId = authUtil.getUserIdFromRequest(request);
         List<Address> addresses = addressService.listByUserId(userId);
         return R.ok(addresses);
     }
 
     /**
      * 添加地址
-     * @param address 地址信息
+     * @param addressRequest 地址信息（DTO，手机号等格式由 @Valid 校验）
      * @param request HTTP请求
      * @return 添加结果
      */
     @Operation(summary = "添加地址", description = "添加新的收货地址")
     @PostMapping
-    @Transactional(rollbackFor = Exception.class)
-    public ResponseEntity<R<?>> add(@RequestBody Address address, HttpServletRequest request) {
-        // 验证手机号码格式
-        if (!ValidationUtil.isValidPhone(address.getPhone())) {
-            R<?> errorResponse = R.error(ResultCode.PARAM_ERROR, "手机号码格式不正确，请输入11位中国大陆手机号码");
-            return ResponseEntity.status(ResultCode.PARAM_ERROR.getCode()).body(errorResponse);
-        }
-        
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
-        address.setUserId(userId);
-        addressService.save(address);
-        if (Integer.valueOf(1).equals(address.getIsDefault())) {
-            addressService.setDefault(address.getId(), userId);
-        }
+    public ResponseEntity<R<?>> add(@Valid @RequestBody AddressRequest addressRequest, HttpServletRequest request) {
+        Long userId = authUtil.getUserIdFromRequest(request);
+        // “保存地址 + 必要时置默认”是一个事务单元，下沉到 Service，Controller 不再手工拼两步
+        addressService.saveForUser(userId, addressRequest);
         return ResponseEntity.ok(R.ok("添加成功"));
     }
 
     /**
      * 更新地址
      * @param id 地址ID
-     * @param address 地址信息
+     * @param addressRequest 地址信息（DTO）
      * @param request HTTP请求
      * @return 更新结果
      */
     @Operation(summary = "更新地址", description = "更新收货地址信息")
     @PutMapping("/{id}")
-    @Transactional(rollbackFor = Exception.class)
-    public ResponseEntity<R<?>> update(@PathVariable Long id, @RequestBody Address address, HttpServletRequest request) {
-        // 验证手机号码格式
-        if (!ValidationUtil.isValidPhone(address.getPhone())) {
-            R<?> errorResponse = R.error(ResultCode.PARAM_ERROR, "手机号码格式不正确，请输入11位中国大陆手机号码");
-            return ResponseEntity.status(ResultCode.PARAM_ERROR.getCode()).body(errorResponse);
-        }
-        
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
-        Address existingAddress = addressService.getById(id);
-        if (existingAddress == null || !existingAddress.getUserId().equals(userId)) {
-            R<?> errorResponse = R.error(ResultCode.NOT_FOUND, "地址不存在");
-            return ResponseEntity.status(ResultCode.NOT_FOUND.getCode()).body(errorResponse);
-        }
-        address.setId(id);
-        address.setUserId(userId);
-        addressService.updateById(address);
-        if (Integer.valueOf(1).equals(address.getIsDefault())) {
-            addressService.setDefault(id, userId);
-        }
+    public ResponseEntity<R<?>> update(@PathVariable Long id,
+                                       @Valid @RequestBody AddressRequest addressRequest,
+                                       HttpServletRequest request) {
+        Long userId = authUtil.getUserIdFromRequest(request);
+        // 归属校验（userId 进 WHERE）与“更新 + 必要时置默认”的原子性都在 Service 内完成
+        addressService.updateForUser(userId, id, addressRequest);
         return ResponseEntity.ok(R.ok("更新成功"));
     }
 
@@ -106,7 +83,7 @@ public class AddressController {
     @Operation(summary = "删除地址", description = "删除收货地址")
     @DeleteMapping("/{id}")
     public R<?> delete(@PathVariable Long id, HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        Long userId = authUtil.getUserIdFromRequest(request);
         addressService.delete(id, userId);
         return R.ok("删除成功");
     }
@@ -120,7 +97,7 @@ public class AddressController {
     @Operation(summary = "设置默认地址", description = "设置默认收货地址")
     @PutMapping("/{id}/default")
     public R<?> setDefault(@PathVariable Long id, HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        Long userId = authUtil.getUserIdFromRequest(request);
         addressService.setDefault(id, userId);
         return R.ok("设置成功");
     }

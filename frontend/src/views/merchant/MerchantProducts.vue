@@ -117,9 +117,12 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { fileAPI, merchantAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
+import { confirm } from '../../composables/useConfirm'
+import { FALLBACK_IMAGE } from '../../constants/images'
+import { money } from '../../utils/format'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -136,7 +139,7 @@ const pageSize = ref(10)
 const total = ref(0)
 const keyword = ref('')
 const statusFilter = ref('all')
-const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
+const fallbackImage = FALLBACK_IMAGE
 
 const productForm = ref(emptyProduct())
 
@@ -227,7 +230,7 @@ const handleImageUpload = async options => {
 }
 
 const handleDelete = async id => {
-  await ElMessageBox.confirm('删除后商品将无法恢复，确定删除吗？', '删除商品', { type: 'warning' })
+  if (!await confirm('删除后商品将无法恢复，确定删除吗？', '删除商品')) return
   await merchantAPI.products.delete(id)
   ElMessage.success('商品已删除')
   await loadProducts()
@@ -237,8 +240,6 @@ const copyProduct = async product => {
   await navigator.clipboard.writeText(`${location.origin}/product/${product.id}`)
   ElMessage.success('商品链接已复制')
 }
-
-const money = value => Number(value || 0).toFixed(2)
 </script>
 
 <style scoped>

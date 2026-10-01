@@ -14,11 +14,9 @@ export const merchantAPI = {
     update: (id, data) => request.put(`/merchant/products/${id}`, data),
     delete: (id) => request.delete(`/merchant/products/${id}`)
   },
+  // 分类为全平台共享数据，写操作只在管理员端（/admin/categories），商家端仅只读查询
   categories: {
-    getList: (params) => request.get('/merchant/categories', { params }),
-    create: (data) => request.post('/merchant/categories', data),
-    update: (id, data) => request.put(`/merchant/categories/${id}`, data),
-    delete: (id) => request.delete(`/merchant/categories/${id}`)
+    getList: (params) => request.get('/merchant/categories', { params })
   },
   orders: {
     getList: (params) => request.get('/merchant/orders', { params }),

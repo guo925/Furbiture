@@ -14,7 +14,7 @@
               type="button"
               @click="activeImage = image"
             >
-              <img :src="image" :alt="product.name">
+              <img :src="image" :alt="product.name" loading="lazy">
             </button>
           </div>
         </div>
@@ -83,6 +83,7 @@ import UserLayout from '../../components/UserLayout.vue'
 import { productAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
 import { useCartStore } from '../../stores/cart'
+import { money } from '../../utils/format'
 
 const router = useRouter()
 const route = useRoute()
@@ -116,7 +117,7 @@ const loadProductDetail = async (id) => {
     specs.value = data.specs || []
     activeImage.value = imageList.value[0]
   } catch (error) {
-    console.error('获取商品详情失败:', error)
+    console.error('获取商品详情失败:', error?.message)
     ElMessage.error('获取商品详情失败')
     router.push('/products')
   }
@@ -149,8 +150,6 @@ const buyNow = async () => {
     ElMessage.error(error.message || '操作失败')
   }
 }
-
-const money = (value) => Number(value || 0).toFixed(2)
 </script>
 
 <style scoped>

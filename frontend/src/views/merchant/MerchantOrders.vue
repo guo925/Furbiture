@@ -4,11 +4,12 @@
       <div class="panel-toolbar">
         <el-tabs v-model="statusFilter" @tab-change="loadOrders">
           <el-tab-pane label="全部订单" name="all" />
-          <el-tab-pane label="待付款" name="0" />
-          <el-tab-pane label="待发货" name="1" />
-          <el-tab-pane label="已发货" name="2" />
-          <el-tab-pane label="已完成" name="3" />
-          <el-tab-pane label="已取消" name="4" />
+          <el-tab-pane
+            v-for="opt in ORDER_STATUS_OPTIONS"
+            :key="opt.value"
+            :label="opt.label"
+            :name="String(opt.value)"
+          />
         </el-tabs>
         <div class="search-actions">
           <el-input v-model="keyword" clearable placeholder="搜索订单号" @keyup.enter="loadOrders" />
@@ -30,7 +31,7 @@
         </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag :type="statusMeta(row.status).type">{{ statusMeta(row.status).text }}</el-tag>
+            <el-tag :type="statusMeta(row.status).type">{{ statusMeta(row.status).label }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="发货时效" width="160">
@@ -61,7 +62,7 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="订单号">{{ currentOrder.orderNo }}</el-descriptions-item>
           <el-descriptions-item label="订单状态">
-            <el-tag :type="statusMeta(currentOrder.status).type">{{ statusMeta(currentOrder.status).text }}</el-tag>
+            <el-tag :type="statusMeta(currentOrder.status).type">{{ statusMeta(currentOrder.status).label }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="实付金额">¥{{ money(currentOrder.totalAmount) }}</el-descriptions-item>
           <el-descriptions-item label="下单时间">{{ formatTime(currentOrder.createTime) }}</el-descriptions-item>
@@ -86,9 +87,13 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { merchantAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
+import { confirm } from '../../composables/useConfirm'
+import { getOrderStatusMeta, ORDER_STATUS_OPTIONS } from '../../constants/orderStatus'
+import { FALLBACK_IMAGE } from '../../constants/images'
+import { money, formatDateTime } from '../../utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -105,7 +110,7 @@ const keyword = ref('')
 const detailDialogVisible = ref(false)
 const currentOrder = ref(null)
 const orderItems = ref([])
-const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
+const fallbackImage = FALLBACK_IMAGE
 
 const filteredOrders = computed(() => orders.value.filter(order => {
   const matchesKeyword = !keyword.value || order.orderNo.includes(keyword.value.trim())
@@ -141,25 +146,17 @@ const handleDetail = async orderNo => {
 }
 
 const handleShip = async orderNo => {
-  await ElMessageBox.confirm('确认该订单已经完成拣货并发货？', '订单发货', { type: 'warning' })
+  if (!await confirm('确认该订单已经完成拣货并发货？', '订单发货')) return
   await merchantAPI.orders.updateStatus(orderNo, 2)
   ElMessage.success('发货成功')
   detailDialogVisible.value = false
   await loadOrders()
 }
 
-const statusMeta = status => ({
-  0: { text: '待付款', type: 'warning' },
-  1: { text: '待发货', type: 'primary' },
-  2: { text: '已发货', type: 'success' },
-  3: { text: '已完成', type: 'info' },
-  4: { text: '已取消', type: 'info' },
-  5: { text: '已退款', type: 'danger' }
-}[status] || { text: '未知', type: 'info' })
+const statusMeta = status => getOrderStatusMeta(status)
 
 const shipHint = order => order.status === 1 ? '建议24小时内发货' : '-'
-const money = value => Number(value || 0).toFixed(2)
-const formatTime = time => time ? String(time).replace('T', ' ').slice(0, 16) : '-'
+const formatTime = time => formatDateTime(time)
 </script>
 
 <style scoped>

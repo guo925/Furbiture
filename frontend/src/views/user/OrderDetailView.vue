@@ -15,7 +15,7 @@
           <el-descriptions :column="2" border>
             <el-descriptions-item label="订单号">{{ orderDetail.orderNumber }}</el-descriptions-item>
             <el-descriptions-item label="状态">
-              <el-tag :type="statusMeta.type">{{ statusMeta.text }}</el-tag>
+              <el-tag :type="statusMeta.type">{{ statusMeta.label }}</el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="总金额">
               <span class="price">¥{{ orderDetail.totalPrice }}</span>
@@ -55,7 +55,7 @@
         <section class="panel">
           <h2>商品明细</h2>
           <div v-for="item in orderItems" :key="item.id" class="goods-row">
-            <img :src="item.productImage || fallbackImage" :alt="item.productName">
+            <img :src="item.productImage || fallbackImage" :alt="item.productName" loading="lazy">
             <div class="goods-info">
               <router-link :to="`/product/${item.productId}`">{{ item.productName }}</router-link>
               <span>¥{{ item.price }} × {{ item.quantity }}</span>
@@ -89,6 +89,8 @@ import { orderAPI, addressAPI } from '../../api'
 import { ElMessage } from 'element-plus'
 import { Clock, Van, Check } from '@element-plus/icons-vue'
 import UserLayout from '../../components/UserLayout.vue'
+import { getOrderStatusMeta } from '../../constants/orderStatus'
+import { FALLBACK_IMAGE } from '../../constants/images'
 
 const route = useRoute()
 const router = useRouter()
@@ -98,21 +100,9 @@ const loading = ref(true)
 const orderDetail = ref(null)
 const orderItems = ref([])
 const address = ref(null)
-const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
+const fallbackImage = FALLBACK_IMAGE
 
-const statusMap = {
-  0: { text: '待付款', type: 'warning' },
-  1: { text: '已付款', type: 'primary' },
-  2: { text: '已发货', type: 'success' },
-  3: { text: '已完成', type: 'info' },
-  4: { text: '已取消', type: 'info' },
-  5: { text: '已退款', type: 'danger' }
-}
-
-const statusMeta = computed(() => {
-  const status = orderDetail.value?.status
-  return statusMap[status] || { text: '未知', type: 'info' }
-})
+const statusMeta = computed(() => getOrderStatusMeta(orderDetail.value?.status))
 
 const canCancel = computed(() => orderDetail.value?.status === 0)
 const canPay = computed(() => orderDetail.value?.status === 0)
@@ -169,7 +159,7 @@ const loadOrderDetail = async () => {
       await loadAddress(data.order.addressId)
     }
   } catch (error) {
-    console.error('获取订单详情失败:', error)
+    console.error('获取订单详情失败:', error?.message)
     ElMessage.error('获取订单详情失败')
   } finally {
     loading.value = false
@@ -191,7 +181,7 @@ const loadAddress = async (addressId) => {
         detail: addr.detailAddress
       }
     }
-  } catch (error) { /* ignore */ }
+  } catch { /* ignore */ }
 }
 
 const goBack = () => router.push('/orders')

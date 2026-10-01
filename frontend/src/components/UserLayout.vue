@@ -31,7 +31,7 @@
           </span>
         </router-link>
 
-        <div class="search-bar" ref="searchRef">
+        <div class="search-bar">
           <el-input
             v-model="keyword"
             placeholder="搜索沙发、床、餐桌、收纳柜"

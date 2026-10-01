@@ -6,11 +6,12 @@ import com.gjx.service.IOrderService;
 import com.gjx.service.IUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,16 +24,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin/dashboard")
 @Tag(name = "管理员仪表板", description = "管理员仪表板相关接口")
+@RequiredArgsConstructor
 public class AdminDashboardController {
 
-    @Autowired
-    private IProductService productService;
+    private final IProductService productService;
     
-    @Autowired
-    private IOrderService orderService;
+    private final IOrderService orderService;
     
-    @Autowired
-    private IUserService userService;
+    private final IUserService userService;
 
     /**
      * 获取仪表板统计数据
@@ -56,11 +55,11 @@ public class AdminDashboardController {
         stats.put("todayOrderCount", todayOrderCount);
         
         // 总销售额
-        double totalSales = orderService.getTotalSales();
+        BigDecimal totalSales = orderService.getTotalSales();
         stats.put("totalSales", totalSales);
-        
+
         // 今日销售额
-        double todaySales = orderService.getTodaySales();
+        BigDecimal todaySales = orderService.getTodaySales();
         stats.put("todaySales", todaySales);
         
         // 用户总数
@@ -86,7 +85,7 @@ public class AdminDashboardController {
             String dateStr = date.toString();
             
             // 计算当天的销售额
-            double sales = orderService.getSalesByDate(dateStr);
+            BigDecimal sales = orderService.getSalesByDate(dateStr);
             
             // 计算当天的订单数量
             int orderCount = orderService.countOrdersByDate(dateStr);

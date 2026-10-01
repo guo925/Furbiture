@@ -104,3 +104,12 @@
 | `gitcommit-agent` | 质检流水线（通常由 `/git-save` 调用，不自提交） |
 | `tester` | 单元测试专家 |
 | `quality-engineer` | 四维度质量审查（注释 25% / 安全 30% / 规范 25% / 架构 20%） |
+| `security-auditor` | 专查 IDOR / Controller 吞异常 / 校验注解空转 |
+| `dead-feature-hunter` | 专查「看起来实现了、实际从未生效」的功能 |
+| skill `furbiture-authorization` | 归属校验的正确写法（写按 ID 操作的接口前会加载） |
+| `scripts/check-api-contract.mjs` | 校验前端 API 调用是否存在对应定义 |
+| `scripts/check-bundle.mjs` | 断言产物未混入未使用的 Element Plus 组件（防 `manualChunks` 坑复发，**需先 build**） |
+| `scripts/check-icon-imports.mjs` | 断言模板用到的 EP 图标都有显式 import（图标已不全量注册） |
+
+> ⚠️ `quality-engineer-references/security-checklist.md` 里的 IDOR 示例是**先查后判断**的写法，
+> 在"被检查的条件会变"时有竞态。**以 skill `furbiture-authorization` 为准**（条件下沉进 WHERE）。

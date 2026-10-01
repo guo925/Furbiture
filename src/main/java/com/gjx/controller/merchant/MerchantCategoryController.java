@@ -1,37 +1,45 @@
 package com.gjx.controller.merchant;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
-import com.gjx.common.ResultCode;
 import com.gjx.entity.Category;
-import com.gjx.entity.Product;
-import com.gjx.mapper.ProductMapper;
 import com.gjx.service.ICategoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 商家分类管理控制器
+ * 商家端分类查询控制器（只读）
+ * <p>
+ * <b>为什么分类不收归商家管理</b>：category 表是<b>全平台共享数据</b>，表内没有 merchant_id，
+ * 任何一个商家都不"拥有"任何一条分类。分类的增删改一律归管理员端
+ * {@code /api/admin/categories}（SecurityConfig 中限定 ADMIN 权限）。
+ * <p>
+ * 本控制器此前带有 POST / PUT / DELETE 三个写接口，而 {@code /api/merchant/**}
+ * 仅要求 MERCHANT 权限 → <b>任意商家都能增删改全平台分类</b>：可删除别人正使用的分类、
+ * 可把分类挂到任意位置制造环，且每次写入都会连带清空分类树缓存，
+ * 污染前台所有页面的分类展示。故移除全部写接口，只保留只读查询。
  */
-@Slf4j
 @RestController
 @RequestMapping("/api/merchant")
-@Tag(name = "商家分类管理", description = "商家商品分类CRUD接口")
+@Tag(name = "商家分类管理", description = "商家端分类查询接口（只读）")
+@RequiredArgsConstructor
 public class MerchantCategoryController {
 
-    @Autowired
-    private ICategoryService categoryService;
+    private final ICategoryService categoryService;
 
-    @Autowired
-    private ProductMapper productMapper;
-
-    @Operation(summary = "获取分类列表", description = "分页获取商品分类")
+    /**
+     * 分页获取商品分类（只读）
+     * @param page 页码
+     * @param size 每页大小
+     * @param name 分类名称（模糊搜索，可选）
+     * @return 分类分页数据
+     */
+    @Operation(summary = "获取分类列表", description = "分页获取商品分类（只读）")
     @GetMapping("/categories")
     public R<Page<Category>> getCategories(
             @RequestParam(defaultValue = "1") Integer page,
@@ -45,68 +53,12 @@ public class MerchantCategoryController {
             categoryPage = categoryService.page(new Page<>(page, size));
         }
         for (Category category : categoryPage.getRecords()) {
+            // 先判 null 再拆箱比较：parentId 为 null 时直接 > 0 会 NPE
             if (category.getParentId() != null && category.getParentId() > 0) {
                 Category parent = categoryService.getById(category.getParentId());
                 if (parent != null) category.setParentName(parent.getName());
             }
         }
         return R.ok(categoryPage);
-    }
-
-    @Operation(summary = "添加分类", description = "添加商品分类")
-    @PostMapping("/categories")
-    public R<?> addCategory(@RequestBody Category category) {
-        if (category.getParentId() == null || category.getParentId() == 0) {
-            category.setLevel(1);
-            category.setParentId(0L);
-        } else {
-            Category parent = categoryService.getById(category.getParentId());
-            if (parent == null) return R.error(ResultCode.NOT_FOUND, "父分类不存在");
-            category.setLevel(parent.getLevel() + 1);
-        }
-        if (category.getSortOrder() == null) category.setSortOrder(0);
-        // 使用 service 层保存以触发 @CacheEvict 清除分类树缓存
-        categoryService.save(category);
-        log.info("[商家添加分类] name={}", category.getName());
-        return R.ok("添加成功");
-    }
-
-    @Operation(summary = "更新分类", description = "更新商品分类")
-    @PutMapping("/categories/{id}")
-    public R<?> updateCategory(@PathVariable Long id, @RequestBody Category category) {
-        Category existing = categoryService.getById(id);
-        if (existing == null) return R.error(ResultCode.NOT_FOUND, "分类不存在");
-        category.setId(id);
-        if (category.getParentId() != null && !category.getParentId().equals(existing.getParentId())) {
-            if (category.getParentId() == 0) {
-                category.setLevel(1);
-            } else {
-                Category parent = categoryService.getById(category.getParentId());
-                if (parent == null) return R.error(ResultCode.NOT_FOUND, "父分类不存在");
-                category.setLevel(parent.getLevel() + 1);
-            }
-        }
-        // 使用 service 层更新以触发 @CacheEvict 清除分类树缓存
-        categoryService.updateById(category);
-        return R.ok("更新成功");
-    }
-
-    @Operation(summary = "删除分类", description = "删除商品分类（需检查子分类和关联商品）")
-    @DeleteMapping("/categories/{id}")
-    public R<?> deleteCategory(@PathVariable Long id) {
-        Category category = categoryService.getById(id);
-        if (category == null) return R.error(ResultCode.NOT_FOUND, "分类不存在");
-
-        List<Category> children = categoryService.lambdaQuery()
-                .eq(Category::getParentId, id).list();
-        if (!children.isEmpty()) return R.error(ResultCode.ERROR, "请先删除子分类");
-
-        long productCount = productMapper.selectCount(
-                new LambdaQueryWrapper<Product>().eq(Product::getCategoryId, id));
-        if (productCount > 0) return R.error(ResultCode.ERROR, "该分类下存在商品，无法删除");
-
-        // 使用 service 层删除以触发 @CacheEvict 清除分类树和商品列表缓存
-        categoryService.removeById(id);
-        return R.ok("删除成功");
     }
 }

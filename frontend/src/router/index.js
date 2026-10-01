@@ -157,6 +157,14 @@ const router = createRouter({
           meta: { title: '店铺资料' }
         }
       ]
+    },
+    // 404 兜底：vue-router 4 在无匹配路由时不渲染任何组件 →
+    // 访问未知 URL 会得到纯白屏。必须显式 catch-all，且**放在最后**。
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'NotFound',
+      component: () => import('../views/NotFoundView.vue'),
+      meta: { title: '页面不存在' }
     }
   ]
 })
@@ -193,8 +201,11 @@ router.beforeEach((to, from, next) => {
       next()
     }
   } catch (error) {
-    console.error('路由守卫错误:', error)
-    next()
+    // fail-close：守卫内出错时**不放行**受保护路由。
+    // 原先的 next() 会在 store 初始化异常等情况下把 admin / merchant 页面
+    // 直接放给未认证用户，属安全默认值错误。出错一律回登录页。
+    console.error('路由守卫错误:', error?.message)
+    next({ name: 'Login' })
   }
 })
 

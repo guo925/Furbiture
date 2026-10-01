@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { cartAPI, productAPI } from '../api'
+import { cartAPI } from '../api'
 
 export const useCartStore = defineStore('cart', () => {
   const cartItems = ref([])
@@ -21,48 +21,21 @@ export const useCartStore = defineStore('cart', () => {
   })
 
   // 获取购物车列表
+  // 后端 GET /api/carts 已随每条购物车行返回商品快照（CartItemVO.product），
+  // 因此这里不再对每条购物车项补查商品详情 —— 一次请求即可拿到全部展示所需数据。
   const getCartList = async () => {
     try {
       loading.value = true
       const response = await cartAPI.getList()
-      console.log('响应数据:', response)
-      console.log('响应数据结构:', response.data)
       // 确保正确获取购物车列表数据
       const carts = response.data.data || response.data || []
-      console.log('购物车列表数据:', carts)
-      
-      // 为每个购物车项补充商品信息
-      const cartItemsWithProduct = await Promise.all(
-        carts.map(async (cart) => {
-          console.log('购物车项:', cart)
-          try {
-            const productResponse = await productAPI.getDetail(cart.productId)
-            const productData = productResponse.data.data?.product || productResponse.data?.product || null
-            return {
-              ...cart,
-              product: productData
-            }
-          } catch (error) {
-            console.error(`获取商品 ${cart.productId} 信息失败:`, error)
-            return {
-              ...cart,
-              product: null
-            }
-          }
-        })
-      )
-      
+
       // 清除旧数据，确保使用最新的购物车列表
       cartItems.value = []
       // 确保使用普通数组，避免Proxy对象导致的问题
-      cartItems.value = [...cartItemsWithProduct]
-      console.log('处理后的购物车列表:', cartItems.value)
-      // 输出每个购物车项的ID，确保ID正确
-      cartItems.value.forEach((item, index) => {
-        console.log(`购物车项 ${index} ID:`, item.id)
-      })
+      cartItems.value = [...carts]
     } catch (error) {
-      console.error('获取购物车失败:', error)
+      console.error('获取购物车失败:', error?.message)
       cartItems.value = []
     } finally {
       loading.value = false
@@ -70,7 +43,7 @@ export const useCartStore = defineStore('cart', () => {
   }
 
   // 添加到购物车
-  const addToCart = async (productId, quantity = 1, showMessage = true) => {
+  const addToCart = async (productId, quantity = 1) => {
     try {
       const response = await cartAPI.add({
         productId,
@@ -86,17 +59,13 @@ export const useCartStore = defineStore('cart', () => {
   // 更新购物车数量
   const updateCartItem = async (id, quantity) => {
     try {
-      console.log('更新购物车数量 - 购物车ID:', id, '数量:', quantity)
       const response = await cartAPI.update(id, {
         quantity
       })
-      console.log('更新购物车成功:', response)
       await getCartList()
       return response.data
     } catch (error) {
-      console.error('更新购物车失败:', error)
-      console.error('错误响应:', error.response)
-      console.error('错误响应数据:', error.response?.data)
+      console.error('更新购物车失败:', error?.message)
       throw {
         message: error.response?.data?.msg || error.response?.data?.message || '更新失败'
       }
@@ -104,17 +73,13 @@ export const useCartStore = defineStore('cart', () => {
   }
 
   // 删除购物车商品
-  const removeCartItem = async (id) => {
+  const removeCartItem = async id => {
     try {
-      console.log('删除购物车商品 - 购物车ID:', id)
       const response = await cartAPI.remove(id)
-      console.log('删除购物车成功:', response)
       await getCartList()
       return response.data
     } catch (error) {
-      console.error('删除购物车商品失败:', error)
-      console.error('错误响应:', error.response)
-      console.error('错误响应数据:', error.response?.data)
+      console.error('删除购物车商品失败:', error?.message)
       throw {
         message: error.response?.data?.msg || error.response?.data?.message || '删除失败'
       }

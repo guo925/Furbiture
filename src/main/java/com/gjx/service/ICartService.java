@@ -1,6 +1,7 @@
 package com.gjx.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.gjx.dto.response.CartItemVO;
 import com.gjx.entity.Cart;
 
 import java.util.List;
@@ -10,11 +11,11 @@ import java.util.List;
  */
 public interface ICartService extends IService<Cart> {
     /**
-     * 根据用户ID获取购物车列表
+     * 根据用户ID获取购物车列表（含商品快照，一次批量查商品，避免逐条补查的 N+1）
      * @param userId 用户ID
-     * @return 购物车列表
+     * @return 购物车条目列表（含商品快照）
      */
-    List<Cart> listByUserId(Long userId);
+    List<CartItemVO> listByUserId(Long userId);
     
     /**
      * 添加商品到购物车

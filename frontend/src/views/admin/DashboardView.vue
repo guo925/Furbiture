@@ -96,7 +96,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
-import * as echarts from 'echarts'
+import echarts from '../../utils/echarts'
 import { adminAPI } from '../../api/modules/admin'
 import { Document, Clock, Money, User, Goods } from '@element-plus/icons-vue'
 
@@ -119,7 +119,7 @@ const loadData = async () => {
     if (res.data?.data) Object.assign(stats, res.data.data)
     const hotRes = await adminAPI.dashboard.getHotProducts()
     hotProducts.value = hotRes.data?.data || []
-  } catch (e) { console.error('加载仪表板失败', e) }
+  } catch (e) { console.error('加载仪表板失败:', e?.message) }
 }
 
 const loadChart = async () => {
@@ -130,7 +130,7 @@ const loadChart = async () => {
     const dates = rawData.map(i => i.date.slice(5)) // 截取 MM-DD
     const values = rawData.map(i => i.sales)
     renderChart(dates, values)
-  } catch (e) { console.error('加载图表失败', e) }
+  } catch (e) { console.error('加载图表失败:', e?.message) }
 }
 
 const renderChart = (dates, values) => {

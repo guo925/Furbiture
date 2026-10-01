@@ -1,24 +1,31 @@
 package com.gjx.controller.admin;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
+import com.gjx.common.ResultCode;
+import com.gjx.dto.request.OrderStatusRequest;
 import com.gjx.entity.Order;
+import com.gjx.enums.OrderStatusEnum;
 import com.gjx.service.IOrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 /**
  * 管理员订单管理控制器
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/admin/orders")
 @Tag(name = "管理员订单管理", description = "管理员订单管理相关接口")
+@RequiredArgsConstructor
 public class AdminOrderController {
 
-    @Autowired
-    private IOrderService orderService;
+    private final IOrderService orderService;
 
     /**
      * 获取订单列表
@@ -55,7 +62,7 @@ public class AdminOrderController {
     public R<Order> detail(@PathVariable Long id) {
         Order order = orderService.getById(id);
         if (order == null) {
-            return R.error("订单不存在");
+            return R.error(ResultCode.NOT_FOUND, "订单不存在");
         }
         return R.ok(order);
     }
@@ -66,29 +73,45 @@ public class AdminOrderController {
      * @param status 订单状态
      * @return 更新结果
      */
-    @Operation(summary = "更新订单状态", description = "更新订单状态")
+    @Operation(summary = "更新订单状态", description = "管理员应急通道：将订单强制改为任一合法状态")
     @PutMapping("/{id}/status")
-    public R<?> updateStatus(@PathVariable Long id, @RequestBody StatusUpdateRequest statusRequest) {
-        Order order = new Order();
-        order.setId(id);
-        order.setStatus(statusRequest.getStatus());
-        orderService.updateById(order);
+    public R<?> updateStatus(@PathVariable Long id, @Valid @RequestBody OrderStatusRequest statusRequest) {
+        // 目标状态必须是枚举内的合法值，否则会写进 999 这类脏数据污染统计
+        OrderStatusEnum targetStatus = OrderStatusEnum.fromCode(statusRequest.getStatus());
+        if (targetStatus == null) {
+            return R.error(ResultCode.PARAM_ERROR, "非法的订单状态");
+        }
+
+        Order order = orderService.getById(id);
+        if (order == null) {
+            return R.error(ResultCode.NOT_FOUND, "订单不存在");
+        }
+        OrderStatusEnum currentStatus = OrderStatusEnum.fromCode(order.getStatus());
+        if (currentStatus == null) {
+            return R.error(ResultCode.PARAM_ERROR, "订单当前状态异常，无法流转");
+        }
+        if (currentStatus == targetStatus) {
+            return R.ok("状态未变化");   // 幂等：重复提交不报错也不产生额外写入
+        }
+        // 只允许合法的状态迁移。仅校验"目标值合法"是不够的——
+        // 那仍允许把「已取消」改成「已付款」，凭空造出一笔从未发生的交易，破坏对账。
+        if (!currentStatus.canTransitionTo(targetStatus)) {
+            return R.error(ResultCode.BUSINESS_ERROR,
+                    "不允许从「" + currentStatus.getDescription() + "」变更为「" + targetStatus.getDescription() + "」");
+        }
+
+        // 条件更新：把**期望的前置状态**也写进 WHERE。这样"检查"与"更新"之间即使
+        // 被并发修改也不会写坏数据（少了这个条件就是典型的 TOCTOU）。
+        boolean updated = orderService.update(new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, id)
+                .eq(Order::getStatus, currentStatus.getCode())    // ← 期望前置状态进 WHERE
+                .set(Order::getStatus, targetStatus.getCode()));
+        if (!updated) {
+            return R.error(ResultCode.BUSINESS_ERROR, "订单状态已被其他操作变更，请刷新后重试");
+        }
+
+        log.info("[管理员更新订单状态] orderId={}, {} -> {}", id, currentStatus.getCode(), targetStatus.getCode());
         return R.ok("状态更新成功");
-    }
-    
-    /**
-     * 状态更新请求
-     */
-    static class StatusUpdateRequest {
-        private Integer status;
-        
-        public Integer getStatus() {
-            return status;
-        }
-        
-        public void setStatus(Integer status) {
-            this.status = status;
-        }
     }
 
     /**

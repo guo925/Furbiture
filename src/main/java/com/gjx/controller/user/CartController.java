@@ -1,14 +1,17 @@
 package com.gjx.controller.user;
 
-import com.gjx.common.BusinessException;
 import com.gjx.common.R;
-import com.gjx.entity.Cart;
+import com.gjx.dto.response.CartItemVO;
 import com.gjx.service.ICartService;
 import com.gjx.util.AuthenticationUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,21 +22,23 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/carts")
 @Tag(name = "购物车管理", description = "购物车相关接口")
+@RequiredArgsConstructor
 public class CartController {
 
-    @Autowired
-    private ICartService cartService;
+    private final AuthenticationUtil authUtil;
+
+    private final ICartService cartService;
 
     /**
      * 获取购物车列表
      * @param request HTTP请求
-     * @return 购物车列表
+     * @return 购物车条目列表（含商品快照）
      */
-    @Operation(summary = "获取购物车列表", description = "获取当前用户的购物车商品列表")
+    @Operation(summary = "获取购物车列表", description = "获取当前用户的购物车商品列表（含商品快照）")
     @GetMapping
-    public R<List<Cart>> list(HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
-        List<Cart> carts = cartService.listByUserId(userId);
+    public R<List<CartItemVO>> list(HttpServletRequest request) {
+        Long userId = authUtil.getUserIdFromRequest(request);
+        List<CartItemVO> carts = cartService.listByUserId(userId);
         return R.ok(carts);
     }
 
@@ -45,8 +50,8 @@ public class CartController {
      */
     @Operation(summary = "添加商品到购物车", description = "将商品添加到购物车")
     @PostMapping
-    public R<?> add(@RequestBody AddToCartRequest requestDTO, HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+    public R<?> add(@Valid @RequestBody AddToCartRequest requestDTO, HttpServletRequest request) {
+        Long userId = authUtil.getUserIdFromRequest(request);
         cartService.addToCart(userId, requestDTO.getProductId(), requestDTO.getQuantity());
         return R.ok("添加成功");
     }
@@ -60,19 +65,12 @@ public class CartController {
      */
     @Operation(summary = "更新购物车商品数量", description = "更新购物车中商品的数量")
     @PutMapping("/{id}")
-    public R<?> update(@PathVariable Long id, @RequestBody UpdateCartRequest requestDTO, HttpServletRequest request) {
-        try {
-            Long userId = AuthenticationUtil.getUserIdFromRequest(request);
-            if (userId == null) {
-                return R.error("用户未登录");
-            }
-            cartService.updateCartItem(userId, id, requestDTO.getQuantity());
-            return R.ok("更新成功");
-        } catch (BusinessException e) {
-            return R.error(e.getMessage());
-        } catch (Exception e) {
-            return R.error("更新失败");
-        }
+    public R<?> update(@PathVariable Long id, @Valid @RequestBody UpdateCartRequest requestDTO, HttpServletRequest request) {
+        // 异常不再在 Controller 内捕获：统一交给 GlobalExceptionHandler，
+        // 既保证返回一致，也避免异常被吞掉后没有任何日志
+        Long userId = authUtil.getUserIdFromRequest(request);
+        cartService.updateCartItem(userId, id, requestDTO.getQuantity());
+        return R.ok("更新成功");
     }
 
     /**
@@ -84,18 +82,9 @@ public class CartController {
     @Operation(summary = "删除购物车商品", description = "从购物车中删除商品")
     @DeleteMapping("/{id}")
     public R<?> delete(@PathVariable Long id, HttpServletRequest request) {
-        try {
-            Long userId = AuthenticationUtil.getUserIdFromRequest(request);
-            if (userId == null) {
-                return R.error("用户未登录");
-            }
-            cartService.deleteCartItem(userId, id);
-            return R.ok("删除成功");
-        } catch (BusinessException e) {
-            return R.error(e.getMessage());
-        } catch (Exception e) {
-            return R.error("删除失败");
-        }
+        Long userId = authUtil.getUserIdFromRequest(request);
+        cartService.deleteCartItem(userId, id);
+        return R.ok("删除成功");
     }
 
     /**
@@ -106,7 +95,7 @@ public class CartController {
     @Operation(summary = "清空购物车", description = "清空当前用户的购物车")
     @DeleteMapping
     public R<?> clear(HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        Long userId = authUtil.getUserIdFromRequest(request);
         cartService.clearCart(userId);
         return R.ok("购物车已清空");
     }
@@ -114,23 +103,23 @@ public class CartController {
     /**
      * 添加到购物车请求
      */
+    @Data
     public static class AddToCartRequest {
+        @NotNull(message = "商品ID不能为空")
         private Long productId;
-        private Integer quantity;
 
-        public Long getProductId() { return productId; }
-        public void setProductId(Long productId) { this.productId = productId; }
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
+        @NotNull(message = "数量不能为空")
+        @Min(value = 1, message = "数量至少为1")
+        private Integer quantity;
     }
 
     /**
      * 更新购物车请求
      */
+    @Data
     public static class UpdateCartRequest {
+        @NotNull(message = "数量不能为空")
+        @Min(value = 1, message = "数量至少为1")
         private Integer quantity;
-
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
     }
 }

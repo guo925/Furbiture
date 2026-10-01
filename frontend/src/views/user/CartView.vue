@@ -25,7 +25,7 @@
         <div class="cart-list">
           <article v-for="item in cartStore.cartItems" :key="item.id" class="cart-item">
             <el-checkbox :model-value="selectedIds.includes(item.id)" @change="checked => toggleItem(item.id, checked)" />
-            <img :src="item.product?.mainImage || fallbackImage" :alt="item.product?.name || '商品图片'">
+            <img :src="item.product?.mainImage || fallbackImage" :alt="item.product?.name || '商品图片'" loading="lazy">
             <div class="item-info">
               <router-link :to="`/product/${item.productId}`">{{ item.product?.name || '商品已下架' }}</router-link>
               <span>{{ item.product?.brand || item.product?.categoryName || '家具商品' }}</span>
@@ -55,6 +55,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import UserLayout from '../../components/UserLayout.vue'
 import { useUserStore } from '../../stores/user'
 import { useCartStore } from '../../stores/cart'
+import { FALLBACK_IMAGE } from '../../constants/images'
+import { money } from '../../utils/format'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -64,7 +66,7 @@ const selectedIds = ref([])
 const removingIds = ref([])
 /** 批量操作（删除选中 / 清空购物车）进行中标记，用于禁用按钮防重复点击 */
 const clearing = ref(false)
-const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
+const fallbackImage = FALLBACK_IMAGE
 
 const selectedItems = computed(() => cartStore.cartItems.filter(item => selectedIds.value.includes(item.id)))
 const selectedTotal = computed(() => selectedItems.value.reduce((sum, item) => sum + Number(item.product?.price || 0) * Number(item.quantity || 0), 0))
@@ -183,8 +185,6 @@ const clearCart = async () => {
 const checkout = () => {
   router.push({ path: '/checkout', query: { cartItemIds: selectedIds.value.join(',') } })
 }
-
-const money = (value) => Number(value || 0).toFixed(2)
 </script>
 
 <style scoped>

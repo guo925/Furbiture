@@ -123,8 +123,8 @@ import {
 } from '@element-plus/icons-vue'
 import { useTheme } from '../../composables/useTheme'
 import { useBreakpoint } from '../../composables/useBreakpoint'
-import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '../../stores/user'
+import { confirm } from '../../composables/useConfirm'
 
 const theme = useTheme()
 const { isNarrow } = useBreakpoint()
@@ -158,11 +158,7 @@ watch(isNarrow, (narrow) => {
 })
 
 const handleLogout = async () => {
-  await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning'
-  })
+  if (!await confirm('确定要退出登录吗？')) return
   userStore.logout()
   router.push('/login')
 }

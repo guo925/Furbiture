@@ -2,11 +2,14 @@ package com.gjx.controller.admin;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
+import com.gjx.common.ResultCode;
+import com.gjx.dto.request.CreateProductRequest;
 import com.gjx.entity.Product;
 import com.gjx.service.IProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -15,10 +18,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/admin/products")
 @Tag(name = "管理员商品管理", description = "管理员商品管理相关接口")
+@RequiredArgsConstructor
 public class AdminProductController {
 
-    @Autowired
-    private IProductService productService;
+    private final IProductService productService;
 
     /**
      * 获取商品列表
@@ -49,35 +52,55 @@ public class AdminProductController {
     public R<Product> detail(@PathVariable Long id) {
         Product product = productService.getById(id);
         if (product == null) {
-            return R.error("商品不存在");
+            return R.error(ResultCode.NOT_FOUND, "商品不存在");
         }
         return R.ok(product);
     }
 
     /**
      * 创建商品
-     * @param product 商品信息
+     * @param request 商品信息（DTO，仅含允许客户端提交的字段）
      * @return 创建结果
      */
     @Operation(summary = "创建商品", description = "创建新商品")
     @PostMapping
-    public R<?> create(@RequestBody Product product) {
-        productService.save(product);
+    public R<?> create(@Valid @RequestBody CreateProductRequest request) {
+        productService.save(toEntity(request));
         return R.ok("创建成功");
     }
 
     /**
      * 更新商品
      * @param id 商品ID
-     * @param product 商品信息
+     * @param request 商品信息（DTO）
      * @return 更新结果
      */
     @Operation(summary = "更新商品", description = "更新商品信息")
     @PutMapping("/{id}")
-    public R<?> update(@PathVariable Long id, @RequestBody Product product) {
+    public R<?> update(@PathVariable Long id, @Valid @RequestBody CreateProductRequest request) {
+        Product product = toEntity(request);
         product.setId(id);
         productService.updateById(product);
         return R.ok("更新成功");
+    }
+
+    /**
+     * DTO → 实体映射
+     * <p>
+     * 只映射允许客户端提交的业务字段，杜绝通过请求体注入 {@code id} / {@code sales} / {@code merchantId}
+     * 等字段（批量赋值漏洞）。
+     */
+    private Product toEntity(CreateProductRequest request) {
+        Product product = new Product();
+        product.setName(request.getName());
+        product.setCategoryId(request.getCategoryId());
+        product.setBrand(request.getBrand());
+        product.setMainImage(request.getMainImage());
+        product.setPrice(request.getPrice());
+        product.setStock(request.getStock());
+        product.setDescription(request.getDescription());
+        product.setStatus(request.getStatus());
+        return product;
     }
 
     /**

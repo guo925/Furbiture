@@ -110,7 +110,7 @@ const loadCategories = async () => {
     const response = await categoryAPI.getList()
     categories.value = (response.data.data || []).filter(item => item.status !== 0).slice(0, 9)
   } catch (error) {
-    console.error('获取分类失败:', error)
+    console.error('获取分类失败:', error?.message)
   }
 }
 
@@ -120,7 +120,7 @@ const loadHotProducts = async () => {
     const response = await productAPI.getList({ page: 1, size: 12, sortBy: 'sales_desc' })
     hotProducts.value = response.data.data?.records || []
   } catch (error) {
-    console.error('获取商品失败:', error)
+    console.error('获取商品失败:', error?.message)
   } finally {
     loading.value = false
   }

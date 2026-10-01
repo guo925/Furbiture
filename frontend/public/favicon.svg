@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="7" fill="#ff5000"/>
+  <g fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 简化座椅：靠背 + 座面 + 两条腿 -->
+    <path d="M10 8v11"/>
+    <path d="M10 19h12"/>
+    <path d="M12 19v7"/>
+    <path d="M22 19v7"/>
+    <path d="M10 12h6"/>
+  </g>
+</svg>

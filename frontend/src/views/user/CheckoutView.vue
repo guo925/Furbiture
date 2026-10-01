@@ -40,7 +40,7 @@
               <router-link to="/cart">返回修改</router-link>
             </div>
             <article v-for="item in checkoutItems" :key="item.id" class="order-item">
-              <img :src="item.product?.mainImage || fallbackImage" :alt="item.product?.name || '商品图片'">
+              <img :src="item.product?.mainImage || fallbackImage" :alt="item.product?.name || '商品图片'" loading="lazy">
               <div>
                 <router-link :to="`/product/${item.productId}`">{{ item.product?.name || '商品已下架' }}</router-link>
                 <span>数量 x {{ item.quantity }}</span>
@@ -85,6 +85,8 @@ import UserLayout from '../../components/UserLayout.vue'
 import { addressAPI, orderAPI } from '../../api'
 import { useUserStore } from '../../stores/user'
 import { useCartStore } from '../../stores/cart'
+import { FALLBACK_IMAGE } from '../../constants/images'
+import { money } from '../../utils/format'
 
 const router = useRouter()
 const route = useRoute()
@@ -94,7 +96,7 @@ const loading = ref(false)
 const submitting = ref(false)
 const addresses = ref([])
 const selectedAddressId = ref(null)
-const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
+const fallbackImage = FALLBACK_IMAGE
 
 const selectedCartIds = computed(() => String(route.query.cartItemIds || '').split(',').filter(Boolean).map(Number))
 const checkoutItems = computed(() => {
@@ -123,7 +125,7 @@ const loadData = async () => {
     const defaultAddress = addresses.value.find(addr => addr.isDefault)
     selectedAddressId.value = defaultAddress?.id || addresses.value[0]?.id || null
   } catch (error) {
-    console.error('加载结算数据失败:', error)
+    console.error('加载结算数据失败:', error?.message)
     ElMessage.error('加载结算数据失败')
   } finally {
     loading.value = false
@@ -149,14 +151,12 @@ const submitOrder = async () => {
     ElMessage.success('支付成功，订单已创建')
     router.push('/orders')
   } catch (error) {
-    console.error('提交订单失败:', error)
+    console.error('提交订单失败:', error?.message)
     ElMessage.error(error.response?.data?.message || error.message || '提交订单失败')
   } finally {
     submitting.value = false
   }
 }
-
-const money = (value) => Number(value || 0).toFixed(2)
 </script>
 
 <style scoped>

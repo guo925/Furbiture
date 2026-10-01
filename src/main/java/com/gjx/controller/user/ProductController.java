@@ -2,6 +2,7 @@ package com.gjx.controller.user;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
+import com.gjx.common.ResultCode;
 import com.gjx.entity.Product;
 import com.gjx.entity.ProductImage;
 import com.gjx.entity.ProductSpec;
@@ -10,7 +11,7 @@ import com.gjx.service.IProductImageService;
 import com.gjx.service.IProductSpecService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,16 +22,17 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/products")
 @Tag(name = "商品管理", description = "商品相关接口")
+@RequiredArgsConstructor
 public class ProductController {
 
-    @Autowired
-    private IProductService productService;
+    /** 关键词长度上限，与 ProductServiceImpl 缓存 key 的截断长度保持一致。 */
+    private static final int KEYWORD_MAX_LENGTH = 32;
+
+    private final IProductService productService;
     
-    @Autowired
-    private IProductImageService productImageService;
+    private final IProductImageService productImageService;
     
-    @Autowired
-    private IProductSpecService productSpecService;
+    private final IProductSpecService productSpecService;
 
     /**
      * 获取商品列表
@@ -48,6 +50,10 @@ public class ProductController {
             @RequestParam(required = false) String sortBy,
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
+        // 在入口拒绝超长关键词：既避免污染缓存 key，也避免超长 LIKE 拖慢查询
+        if (isKeywordTooLong(keyword)) {
+            return R.error(ResultCode.PARAM_ERROR, "关键词长度不能超过 " + KEYWORD_MAX_LENGTH + " 个字符");
+        }
         Page<Product> productPage = productService.listProducts(categoryId, keyword, sortBy, page, size);
         return R.ok(productPage);
     }
@@ -63,7 +69,7 @@ public class ProductController {
         // 获取商品基本信息
         Product product = productService.getById(id);
         if (product == null) {
-            return R.error("商品不存在");
+            return R.error(ResultCode.NOT_FOUND, "商品不存在");
         }
         
         // 获取商品图片
@@ -94,6 +100,9 @@ public class ProductController {
             @RequestParam String keyword,
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
+        if (isKeywordTooLong(keyword)) {
+            return R.error(ResultCode.PARAM_ERROR, "关键词长度不能超过 " + KEYWORD_MAX_LENGTH + " 个字符");
+        }
         Page<Product> productPage = productService.searchProducts(keyword, page, size);
         return R.ok(productPage);
     }
@@ -106,11 +115,24 @@ public class ProductController {
     @Operation(summary = "搜索建议", description = "根据关键词返回自动补全建议")
     @GetMapping("/suggestions")
     public R<List<String>> suggestions(@RequestParam String keyword) {
+        if (isKeywordTooLong(keyword)) {
+            return R.error(ResultCode.PARAM_ERROR, "关键词长度不能超过 " + KEYWORD_MAX_LENGTH + " 个字符");
+        }
         Page<Product> products = productService.searchProducts(keyword, 1, 5);
         List<String> names = products.getRecords().stream()
                 .map(Product::getName)
                 .limit(5)
                 .collect(java.util.stream.Collectors.toList());
         return R.ok(names);
+    }
+
+    /**
+     * 判断关键词是否超过长度上限。
+     * <p>
+     * 超长关键词会被拒绝而不是静默截断：截断会让用户以为搜到了别的东西，
+     * 直接在入口返回参数错误更符合“fail fast”的接口契约。
+     */
+    private static boolean isKeywordTooLong(String keyword) {
+        return keyword != null && keyword.trim().length() > KEYWORD_MAX_LENGTH;
     }
 }

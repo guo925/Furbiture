@@ -115,7 +115,7 @@ const loadUserInfo = async () => {
       name: data.name || ''
     })
   } catch (error) {
-    console.error('获取商家信息失败:', error)
+    console.error('获取商家信息失败:', error?.message)
     ElMessage.error(error.message || '获取商家信息失败')
   }
 }

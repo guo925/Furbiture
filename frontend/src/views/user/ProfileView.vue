@@ -156,19 +156,41 @@ const loadUserInfo = async () => {
       phone: user.phone || ''
     }
   } catch (error) {
-    console.error('获取用户信息失败:', error)
+    console.error('获取用户信息失败:', error?.message)
     ElMessage.error('获取用户信息失败')
   } finally {
     loading.value = false
   }
 }
 
+// 与后端 Page 上限（MAX_PAGE_SIZE=100）对齐。取 100 是为了让本地归并尽量覆盖全部订单——
+// 若订单数超过它，统计只反映最近 100 笔；后续应改为后端提供 /api/orders/stats 统计接口。
+const ORDER_STATS_PAGE_SIZE = 100
+
+// 订单统计：后端没有 /api/orders/stats 接口（orderAPI.getOrderStats 不存在），
+// 因此改用已有的 orderAPI.getList() 拉取当前用户订单并本地归并。
+// 状态码口径以 constants/orderStatus.js 的 ORDER_STATUS 为唯一来源：
+// 0 待付款、1 待发货、2 已发货、3 已完成、4 已取消、5 已退款。
+// 下方统计块的「待收货 / 待评价」是动作视角的统计标签；订单状态徽章的文案
+// 统一由 constants/orderStatus.js 的 getOrderStatusMeta 提供，不再各处自行维护。
+
 const loadOrderStats = async () => {
   try {
-    const response = await orderAPI.getOrderStats()
-    orderStats.value = response.data.data || { total: 0, pending: 0, shipped: 0, reviewed: 0 }
+    // ⚠️ /api/orders 已由「返回数组」改为「返回分页对象」（后端加了分页上限，见 OrderController）。
+    // 所以必须取 data.data.records —— 若仍按数组用 `response.data.data || []`，
+    // 拿到的是 Page 对象，紧接着的 orders.filter(...) 会抛 TypeError，
+    // 而外层 catch 会把它吞掉 → 这四个统计数字**静默变成全 0**，页面上看不出任何报错。
+    const response = await orderAPI.getList({ page: 1, size: ORDER_STATS_PAGE_SIZE })
+    const orders = response.data.data?.records || []
+    const countByStatus = status => orders.filter(order => Number(order.status) === status).length
+    orderStats.value = {
+      total: orders.length,
+      pending: countByStatus(0),
+      shipped: countByStatus(2),
+      reviewed: countByStatus(3)
+    }
   } catch (error) {
-    // API 不存在时保持默认值
+    console.error('获取订单统计失败:', error?.message)
   }
 }
 

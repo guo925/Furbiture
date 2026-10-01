@@ -4,13 +4,32 @@
 -- ============================================
 -- 1. 修改商品表，添加商家ID字段
 -- ============================================
-ALTER TABLE `product` ADD COLUMN IF NOT EXISTS `merchant_id` BIGINT COMMENT '商家ID' AFTER `description`;
+-- ⚠️ 不要写 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`：
+--    `IF NOT EXISTS` 是 MariaDB 方言，**MySQL 8.0 不支持**，直接执行会报 ERROR 1064。
+--    这里沿用 migration_v2.sql 的幂等写法：用存储过程查 information_schema 判断
+--    列/索引是否已存在，再决定是否创建。本脚本因此可以安全地重复执行。
+DELIMITER //
+CREATE PROCEDURE IF NOT EXISTS add_product_merchant_id()
+BEGIN
+  IF NOT EXISTS (SELECT * FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'product'
+                   AND COLUMN_NAME = 'merchant_id') THEN
+    ALTER TABLE `product` ADD COLUMN `merchant_id` BIGINT COMMENT '商家ID' AFTER `description`;
+  END IF;
 
--- 为已有的商品设置一个默认商家ID（假设商家ID为3）
+  -- 不再在这里建 merchant_id 索引：migration_v2 会建 idx_product_merchant(merchant_id)，
+  -- 两者完全重复。迁移 v7 会删掉存量库里多余的 idx_merchant_id。
+END //
+DELIMITER ;
+
+CALL add_product_merchant_id();
+DROP PROCEDURE IF EXISTS add_product_merchant_id;
+
+-- 为已有商品回填一个默认商家ID（假设商家ID为3）。
+-- 注意：这会把所有 merchant_id 为 NULL 的商品归给 merchant1，属一次性数据回填；
+--       应用创建商品时应由服务端强制写入真实的 merchant_id，不应依赖这条兜底。
 UPDATE `product` SET `merchant_id` = 3 WHERE `merchant_id` IS NULL;
-
--- 添加索引
-CREATE INDEX IF NOT EXISTS `idx_merchant_id` ON `product` (`merchant_id`);
 
 -- ============================================
 -- 2. 修改用户表，支持MERCHANT角色

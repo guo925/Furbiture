@@ -13,8 +13,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.PostConstruct;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +29,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 @Tag(name = "认证管理", description = "认证相关接口")
+@RequiredArgsConstructor
 public class AuthController {
 
     /**
@@ -39,17 +40,13 @@ public class AuthController {
      */
     private static final String LOGIN_FAILED_MESSAGE = "用户名或密码错误";
 
-    @Autowired
-    private JwtTokenProvider tokenProvider;
+    private final JwtTokenProvider tokenProvider;
 
-    @Autowired
-    private IUserService userService;
+    private final IUserService userService;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private LoginAttemptService loginAttemptService;
+    private final LoginAttemptService loginAttemptService;
 
     /**
      * 用于用户名不存在时执行一次等价的 BCrypt 校验
@@ -97,8 +94,7 @@ public class AuthController {
         String token = tokenProvider.generateToken(user.getUsername(), user.getId());
         log.info("[登录成功] username={}, userId={}", user.getUsername(), user.getId());
 
-        user.setPassword(null);
-
+        // 密码字段已由 User.password 上的 @JsonProperty(WRITE_ONLY) 保证不会被序列化输出
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
         result.put("user", user);

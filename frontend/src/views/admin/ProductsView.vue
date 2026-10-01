@@ -156,8 +156,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { adminAPI, categoryAPI } from '../../api/modules'
 import { fileAPI } from '../../api/modules/file'
 import { Search, Plus, Picture } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useBreakpoint } from '../../composables/useBreakpoint'
+import { confirm } from '../../composables/useConfirm'
 
 // 弹窗宽度需要随视口变化，故用断点状态而不是写死 640px
 const { isMobile } = useBreakpoint()
@@ -200,7 +201,7 @@ const loadCategories = async () => {
   try {
     const res = await categoryAPI.getList()
     categories.value = res.data.data || []
-  } catch (e) { /* ignore */ }
+  } catch { /* ignore */ }
 }
 
 const handleSearch = () => { page.value = 1; loadData() }
@@ -241,7 +242,7 @@ const handleSave = async () => {
 }
 
 const handleDelete = async (row) => {
-  await ElMessageBox.confirm(`确定删除商品「${row.name}」吗？此操作不可恢复。`, '删除确认', { type: 'warning' })
+  if (!await confirm(`确定删除商品「${row.name}」吗？此操作不可恢复。`, '删除确认')) return
   await adminAPI.products.delete(row.id)
   ElMessage.success('删除成功')
   loadData()
@@ -260,7 +261,7 @@ const handleUpload = async (options) => {
       form.mainImage = res.data.data
       ElMessage.success('上传成功')
     }
-  } catch (e) { ElMessage.error('上传失败') }
+  } catch { ElMessage.error('上传失败') }
 }
 
 const resetForm = () => {

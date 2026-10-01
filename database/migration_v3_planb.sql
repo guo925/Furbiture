@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS `favorite` (
   `user_id` BIGINT NOT NULL COMMENT '用户ID',
   `product_id` BIGINT NOT NULL COMMENT '商品ID',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
-  UNIQUE KEY `uk_user_product` (`user_id`, `product_id`),
-  INDEX `idx_user_id` (`user_id`)
+  UNIQUE KEY `uk_user_product` (`user_id`, `product_id`)
+  -- idx_user_id 不再单独建：被 uk_user_product 最左前缀覆盖（迁移 v7 会删存量库里的它）
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品收藏表';
 
 -- 评价表
@@ -26,8 +26,10 @@ CREATE TABLE IF NOT EXISTS `review` (
   `images` VARCHAR(1000) COMMENT '评价图片JSON数组',
   `is_anonymous` TINYINT DEFAULT 0 COMMENT '是否匿名：1是 0否',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '评价时间',
+  -- 同一订单同一商品只能评价一次（并发兜底；迁移 v5 为存量库补同款唯一键）
+  UNIQUE KEY `uk_user_order_product` (`user_id`, `order_id`, `product_id`),
   INDEX `idx_product_id` (`product_id`),
-  INDEX `idx_user_id` (`user_id`),
+  -- idx_user_id 不再单独建：被 uk_user_order_product 最左前缀覆盖（迁移 v7 会删存量库里的它）
   INDEX `idx_order_id` (`order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品评价表';
 
@@ -75,8 +77,8 @@ CREATE TABLE IF NOT EXISTS `discount` (
   `end_time` DATETIME COMMENT '结束时间',
   `status` TINYINT DEFAULT 1 COMMENT '状态：1启用 0停用',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  INDEX `idx_merchant_id` (`merchant_id`),
-  INDEX `idx_code` (`code`)
+  INDEX `idx_merchant_id` (`merchant_id`)
+  -- idx_code 不再单独建：与 UNIQUE(code) 完全重复（迁移 v7 会删存量库里的它）
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='折扣码表';
 
 -- ============================================

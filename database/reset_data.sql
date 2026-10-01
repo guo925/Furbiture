@@ -2,15 +2,23 @@
 -- 清空所有表数据并重新插入
 -- 执行前请先执行: USE furniture_db;
 -- ============================================
-CREATE DATABASE IF NOT EXISTS furniture_db
-       USE furniture_db;
+-- ⚠️ 破坏性脚本：会清空 furniture_db 的全部业务数据。仅用于开发环境。
+CREATE DATABASE IF NOT EXISTS furniture_db;
+USE furniture_db;
 -- 禁用外键检查（如果有外键约束）
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================
 -- 1. 清空所有表数据
 -- ============================================
+-- 前置条件：schema.sql + merchant_update.sql + migration_v2.sql + migration_v3_planb.sql 都已执行。
+-- 清空顺序：先子表后主表。
+--
+-- ⚠️ TRUNCATE 会把自增 ID 重置为 1。因此**必须把所有表都清空**——
+--    只清一部分会让残留旧数据（如收藏、评价）指向被重新分配的 ID，
+--    产生"旧 user 2 的收藏挂到新 user 2 头上"这类脏数据。
 
+-- 基础表（schema.sql）
 TRUNCATE TABLE `order_item`;
 TRUNCATE TABLE `order`;
 TRUNCATE TABLE `cart`;
@@ -21,6 +29,15 @@ TRUNCATE TABLE `product`;
 TRUNCATE TABLE `category`;
 TRUNCATE TABLE `user`;
 
+-- 迁移新增表（migration_v2 / migration_v3_planb）
+-- 漏掉这几张是历史缺陷：不清会残留指向已重置 ID 的脏数据
+TRUNCATE TABLE `favorite`;
+TRUNCATE TABLE `review`;
+TRUNCATE TABLE `notification`;
+TRUNCATE TABLE `operation_log`;
+TRUNCATE TABLE `discount`;
+TRUNCATE TABLE `merchant_audit`;
+
 -- 启用外键检查
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -28,12 +45,17 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- 2. 重新插入测试数据
 -- ============================================
 
--- 插入测试用户
+-- 插入测试用户（密码均为 123456 的 BCrypt 哈希）
+-- 注意：自增 ID 按插入顺序分配 → admin=1, user1=2, user2=3, user3=4, merchant1=5, merchant2=6。
+--       **代码不应硬编码商家 ID**，必须经 product.merchant_id / 当前登录用户推导。
 INSERT INTO `user` (`username`, `password`, `phone`, `email`, `role`) VALUES
 ('admin', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138000', 'admin@example.com', 'ADMIN'),
 ('user1', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138001', 'user1@example.com', 'USER'),
 ('user2', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138002', 'user2@example.com', 'USER'),
-('user3', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138003', 'user3@example.com', 'USER');
+('user3', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138003', 'user3@example.com', 'USER'),
+-- 商家账号：原脚本漏插这两个，导致重置后商家无法登录、商品无归属
+('merchant1', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138004', 'merchant1@example.com', 'MERCHANT'),
+('merchant2', '$2a$10$rsZCZpE5SIJE7qy5PDuyLOKID6A4DLfdbRdNDHjSZywKQ1ILl2N3O', '13800138005', 'merchant2@example.com', 'MERCHANT');
 
 -- 插入测试分类
 INSERT INTO `category` (`name`, `parent_id`, `level`, `sort_order`) VALUES
@@ -92,6 +114,13 @@ INSERT INTO `product` (`name`, `category_id`, `brand`, `main_image`, `price`, `s
 ('网布办公椅', 15, '得力', '/images/office_chair2.jpg', 599.00, 40, 1, 15, '网布材质，透气舒适，性价比高'),
 -- 文件柜类
 ('钢制文件柜', 16, '震旦', '/images/file_cabinet1.jpg', 799.00, 25, 1, 9, '钢制材质，坚固耐用，大容量储物');
+
+-- 为种子商品分配商家归属。
+-- ⚠️ 这里用 ID 区间只是因为它是种子脚本、ID 可预期；**应用代码绝不能这样硬编码**。
+--    真实业务中 product.merchant_id 必须由服务端从当前登录商家写入。
+-- 前置：上面 6 个用户已插入 → merchant1=5, merchant2=6
+UPDATE `product` SET `merchant_id` = 5 WHERE `id` <= 14;   -- 沙发/茶几/电视柜/床/衣柜 → merchant1
+UPDATE `product` SET `merchant_id` = 6 WHERE `id` > 14;    -- 其余 → merchant2
 
 -- 插入测试商品图片
 INSERT INTO `product_image` (`product_id`, `image_url`, `sort_order`) VALUES

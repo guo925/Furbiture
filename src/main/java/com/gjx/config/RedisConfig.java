@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter.TtlFunction;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
@@ -19,6 +20,7 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Redis 配置
@@ -27,6 +29,12 @@ import java.time.Duration;
 @Configuration
 @EnableCaching
 public class RedisConfig {
+
+    /** 商品列表缓存的基础 TTL，实际过期时间在此基础上叠加随机抖动。 */
+    private static final Duration PRODUCT_LIST_TTL = Duration.ofMinutes(5);
+
+    /** TTL 抖动上限的分母：实际 TTL = 基础值 + [0, 基础值 / 该值)。 */
+    private static final int TTL_JITTER_DIVISOR = 10;
 
     /**
      * 构建缓存序列化用的 ObjectMapper
@@ -86,12 +94,34 @@ public class RedisConfig {
 
         java.util.Map<String, RedisCacheConfiguration> cacheConfigs = new java.util.HashMap<>();
         cacheConfigs.put("categoryTree", defaultConfig.entryTtl(Duration.ofHours(2)));
-        cacheConfigs.put("productList", defaultConfig.entryTtl(Duration.ofMinutes(5)));
-        cacheConfigs.put("productDetail", defaultConfig.entryTtl(Duration.ofMinutes(10)));
+        // productList 的 TTL 叠加随机抖动：固定 TTL 会让同一批 key 在同一秒集体过期，
+        // 随后的请求洪峰同时回源数据库（缓存雪崩）。抖动把过期时刻打散，削掉这个尖峰。
+        cacheConfigs.put("productList", defaultConfig.entryTtl(jitteredTtl(PRODUCT_LIST_TTL)));
+        // 曾经在此注册过 "productDetail"（TTL 10 分钟），但全项目没有任何
+        // @Cacheable(value = "productDetail")，属于死配置（从未生效），故删除。
+        // 若将来要启用商品详情缓存，必须同时补上对应的 @Cacheable 与 @CacheEvict，
+        // 否则“只写不清”同样会导致数据陈旧。
 
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(defaultConfig)
                 .withInitialCacheConfigurations(cacheConfigs)
                 .build();
+    }
+
+    /**
+     * 构造带随机抖动的 TTL 策略：每次写入返回 {@code 基础TTL + [0, 基础TTL/10)} 的随机毫秒数。
+     * <p>
+     * 这里使用 Spring Data Redis 3.2+ 官方提供的 {@link TtlFunction}
+     * （{@code RedisCacheConfiguration#entryTtl(TtlFunction)}），无需自行包装 {@code RedisCacheWriter}，
+     * 也无需任何反射/代理——{@code RedisCache} 会在每次 put 时调用它计算实际 TTL。
+     *
+     * @param baseTtl 基础过期时间
+     * @return 带抖动的 TTL 计算函数
+     */
+    private static TtlFunction jitteredTtl(Duration baseTtl) {
+        long baseMillis = baseTtl.toMillis();
+        // 抖动上限取基础值的 1/10；至少保留 1ms 的取值范围，避免基础 TTL 过小时抖动恒为 0
+        long jitterRange = Math.max(1L, baseMillis / TTL_JITTER_DIVISOR + 1L);
+        return (key, value) -> Duration.ofMillis(baseMillis + ThreadLocalRandom.current().nextLong(jitterRange));
     }
 }

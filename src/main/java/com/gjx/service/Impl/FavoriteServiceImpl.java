@@ -8,19 +8,23 @@ import com.gjx.entity.Product;
 import com.gjx.mapper.FavoriteMapper;
 import com.gjx.service.IFavoriteService;
 import com.gjx.service.IProductService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> implements IFavoriteService {
 
-    @Autowired
-    private IProductService productService;
+    private final IProductService productService;
 
     @Override
     @Transactional
@@ -40,7 +44,15 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
         Favorite favorite = new Favorite();
         favorite.setUserId(userId);
         favorite.setProductId(productId);
-        save(favorite);
+        try {
+            save(favorite);
+        } catch (DuplicateKeyException e) {
+            // 并发双击：两个请求都通过了上面的"不存在"判断，
+            // 先到者插入成功，后到者撞 favorite 的 UNIQUE(user_id, product_id)。
+            // 目标状态（已收藏）已达成，幂等返回，不向上抛 500。
+            log.info("[重复收藏] 并发已存在，幂等返回 userId={}, productId={}", userId, productId);
+            return true;
+        }
         log.info("[添加收藏] userId={}, productId={}", userId, productId);
         return true; // 已收藏
     }
@@ -57,9 +69,19 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
         List<Favorite> favorites = list(new LambdaQueryWrapper<Favorite>()
                 .eq(Favorite::getUserId, userId)
                 .orderByDesc(Favorite::getCreateTime));
+        if (favorites.isEmpty()) {
+            return favorites;
+        }
+        // 一次性批量查商品，避免对每个收藏各查一次（N+1）
+        List<Long> productIds = favorites.stream()
+                .map(Favorite::getProductId)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, Product> productMap = productService.listByIds(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity(), (a, b) -> a));
         // 填充商品信息
         for (Favorite fav : favorites) {
-            Product product = productService.getById(fav.getProductId());
+            Product product = productMap.get(fav.getProductId());
             if (product != null) {
                 fav.setProductName(product.getName());
                 fav.setProductImage(product.getMainImage());

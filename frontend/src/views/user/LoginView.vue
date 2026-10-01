@@ -24,15 +24,35 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../../stores/user'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
-
 const loginFormRef = ref(null)
 const loading = ref(false)
+
+/**
+ * 校验 redirect 是否可安全跳转（防开放重定向）。
+ *
+ * 只接受"站内相对路径"，并在解析后再次确认来源一致，从而一次性挡掉：
+ * - 绝对 URL（https://evil.com、javascript:...）
+ * - 协议相对 URL（//evil.com）
+ * - 反斜杠变体（/\evil.com —— WHATWG URL 会把 \ 归一为 /，等价于 //evil.com）
+ * 归一化后若 origin 与当前站点不一致，一律拒绝。
+ */
+const isSafeRedirect = (target) => {
+  if (typeof target !== 'string' || !target) return false
+  if (!target.startsWith('/') || target.startsWith('//')) return false
+  try {
+    const url = new URL(target, window.location.origin)
+    return url.origin === window.location.origin
+  } catch {
+    return false
+  }
+}
 
 const loginForm = reactive({
   username: '',
@@ -55,10 +75,17 @@ const handleLogin = async () => {
     await loginFormRef.value.validate()
     loading.value = true
     
-    const result = await userStore.login(loginForm.username, loginForm.password)
+    await userStore.login(loginForm.username, loginForm.password)
     ElMessage.success('登录成功')
-    
-    // 根据用户角色跳转到不同页面
+
+    // 优先跳回被 401 打断的原页面（守卫会再按角色复核权限）
+    const redirect = route.query.redirect
+    if (isSafeRedirect(redirect)) {
+      router.push(redirect)
+      return
+    }
+
+    // 否则按用户角色跳转到不同页面
     if (userStore.user.role === 'ADMIN') {
       router.push('/admin/dashboard')
     } else if (userStore.user.role === 'MERCHANT') {

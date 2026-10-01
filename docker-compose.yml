@@ -19,7 +19,17 @@ services:
       - --default-time-zone=+08:00
     volumes:
       - mysql-data:/var/lib/mysql
-      # 首次启动时按文件名顺序执行初始化脚本，顺序不可调整
+      # 首次启动时按文件名顺序执行初始化脚本，顺序不可调整。
+      # 这些脚本**只在数据卷为空时执行一次**；此后改库需手工跑迁移脚本。
+      #
+      # ⚠️ 本项目 schema 有两个"真相来源"，改表结构时必须**两边都改**：
+      #   (A) 全新安装路径：本处挂载的 01~04 脚本（schema.sql 为权威建表脚本）
+      #   (B) 存量升级路径：database/migration_vN_*.sql —— 幂等、可重复执行，
+      #       **故意不挂载**（entrypoint 只在空卷首启跑，挂上去是多余的）
+      # 判断某次变更是否需要同时改 (A)：若新增列/索引对"从零建库"是必需的，就必须加进 (A)，
+      # 否则全新部署会比开发机少一列 —— MyBatis-Plus 会把实体所有字段拼进 SQL，
+      # 缺列会直接 `Unknown column` 让整个模块不可用。
+      # 可用 `node scripts/check-entity-schema.mjs` 检测实体与库结构是否漂移。
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/merchant_update.sql:/docker-entrypoint-initdb.d/02-merchant_update.sql:ro
       - ./database/migration_v2.sql:/docker-entrypoint-initdb.d/03-migration_v2.sql:ro

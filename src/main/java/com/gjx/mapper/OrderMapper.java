@@ -36,7 +36,11 @@ public interface OrderMapper extends BaseMapper<Order> {
 
     /**
      * 查询今日订单数量
+     * <p>
+     * 用半开区间而非 {@code DATE(create_time) = CURDATE()}：后者在索引列上套了函数，
+     * 会让 create_time 索引失效退化为全表扫描。区间写法可走索引，且不受跨天边界影响。
      */
-    @Select("SELECT COUNT(*) FROM `order` WHERE DATE(create_time) = CURDATE()")
+    @Select("SELECT COUNT(*) FROM `order` " +
+            "WHERE create_time >= CURDATE() AND create_time < CURDATE() + INTERVAL 1 DAY")
     int countTodayOrders();
 }

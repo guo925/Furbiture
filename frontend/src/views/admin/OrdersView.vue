@@ -8,11 +8,7 @@
         </el-input>
         <el-select v-model="filterStatus" placeholder="订单状态" clearable style="width:130px" @change="handleSearch">
           <el-option label="全部" :value="null" />
-          <el-option label="待付款" :value="0" />
-          <el-option label="已付款" :value="1" />
-          <el-option label="已发货" :value="2" />
-          <el-option label="已完成" :value="3" />
-          <el-option label="已取消" :value="4" />
+          <el-option v-for="opt in ORDER_STATUS_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
         <el-button type="primary" @click="handleSearch">查询</el-button>
       </div>
@@ -96,8 +92,10 @@
 import { ref, onMounted } from 'vue'
 import { adminAPI } from '../../api/modules/admin'
 import { Search, Picture } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useBreakpoint } from '../../composables/useBreakpoint'
+import { confirm } from '../../composables/useConfirm'
+import { getOrderStatusMeta, ORDER_STATUS_OPTIONS } from '../../constants/orderStatus'
 
 // 详情抽屉需要随视口收窄，故用断点状态而不是写死 480px
 const { isMobile } = useBreakpoint()
@@ -107,9 +105,8 @@ const searchOrderNo = ref(''), filterStatus = ref(null)
 
 const drawerVisible = ref(false), detailOrder = ref(null), detailItems = ref([])
 
-const statusMap = { 0: '待付款', 1: '已付款', 2: '已发货', 3: '已完成', 4: '已取消', 5: '已退款' }
-const statusType = (s) => ({ 0: 'warning', 1: 'primary', 2: '', 3: 'success', 4: 'info', 5: 'info' }[s] || 'info')
-const statusText = (s) => statusMap[s] || '未知'
+const statusType = (s) => getOrderStatusMeta(s).type
+const statusText = (s) => getOrderStatusMeta(s).label
 
 const loadData = async () => {
   loading.value = true
@@ -130,19 +127,19 @@ const showDetail = async (row) => {
   try {
     const res = await adminAPI.orders.getDetail(row.id)
     detailItems.value = res.data.data?.orderItems || []
-  } catch (e) { detailItems.value = [] }
+  } catch { detailItems.value = [] }
   drawerVisible.value = true
 }
 
 const handleDeliver = async (row) => {
-  await ElMessageBox.confirm(`确认对订单 ${row.orderNo?.substring(0, 12)} 执行发货？`, '确认发货', { type: 'info' })
+  if (!await confirm(`确认对订单 ${row.orderNo?.substring(0, 12)} 执行发货？`, '确认发货')) return
   await adminAPI.orders.updateStatus(row.id, 2)
   ElMessage.success('发货成功')
   loadData()
 }
 
 const handleCancel = async (row) => {
-  await ElMessageBox.confirm(`确定取消订单 ${row.orderNo?.substring(0, 12)}？`, '取消确认', { type: 'warning' })
+  if (!await confirm(`确定取消订单 ${row.orderNo?.substring(0, 12)}？`, '取消确认')) return
   await adminAPI.orders.updateStatus(row.id, 4)
   ElMessage.success('已取消')
   loadData()

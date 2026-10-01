@@ -1,11 +1,13 @@
 package com.gjx.controller.admin;
 
 import com.gjx.common.R;
+import com.gjx.dto.request.ProductImageRequest;
 import com.gjx.entity.ProductImage;
 import com.gjx.service.IProductImageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,10 +18,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/product-images")
 @Tag(name = "管理员商品图片管理", description = "管理员商品图片管理相关接口")
+@RequiredArgsConstructor
 public class AdminProductImageController {
 
-    @Autowired
-    private IProductImageService productImageService;
+    private final IProductImageService productImageService;
 
     /**
      * 根据商品ID获取图片列表
@@ -40,23 +42,35 @@ public class AdminProductImageController {
      */
     @Operation(summary = "添加商品图片", description = "为商品添加图片")
     @PostMapping
-    public R<?> add(@RequestBody ProductImage productImage) {
-        productImageService.save(productImage);
+    public R<?> add(@Valid @RequestBody ProductImageRequest request) {
+        productImageService.save(toEntity(request));
         return R.ok("添加成功");
     }
 
     /**
      * 更新商品图片
      * @param id 图片ID
-     * @param productImage 商品图片信息
+     * @param request 商品图片信息（DTO）
      * @return 更新结果
      */
     @Operation(summary = "更新商品图片", description = "更新商品图片信息")
     @PutMapping("/{id}")
-    public R<?> update(@PathVariable Long id, @RequestBody ProductImage productImage) {
+    public R<?> update(@PathVariable Long id, @Valid @RequestBody ProductImageRequest request) {
+        ProductImage productImage = toEntity(request);
         productImage.setId(id);
         productImageService.updateById(productImage);
         return R.ok("更新成功");
+    }
+
+    /**
+     * DTO → 实体映射，只映射允许客户端提交的字段（id 由路径参数决定）
+     */
+    private ProductImage toEntity(ProductImageRequest request) {
+        ProductImage productImage = new ProductImage();
+        productImage.setProductId(request.getProductId());
+        productImage.setImageUrl(request.getImageUrl());
+        productImage.setSortOrder(request.getSortOrder());
+        return productImage;
     }
 
     /**

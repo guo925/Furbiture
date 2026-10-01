@@ -1,0 +1,37 @@
+# 仓库级 EditorConfig —— 覆盖后端 Java 与前端源码
+#
+# 说明：frontend/.editorconfig 里也有一份（含前端专属约定），但它的路径匹配
+#      以该目录为根，`[*.java]` 段在那里永远不会命中——Java 源码在 src/ 下。
+#       本文件放仓库根，用于统一后端缩进与换行，避免「同仓库两种缩进」。
+#
+# 各编辑器（IDEA / VS Code / Vim）原生或经插件支持 EditorConfig。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.java]
+# 后端统一 4 空格缩进（与现有 src/main/java 保持一致）
+indent_size = 4
+max_line_length = 120
+
+[*.{js,vue,ts,json,css,html,yml,yaml}]
+# 前端统一 2 空格缩进
+indent_size = 2
+
+[*.{sql,md}]
+# SQL / Markdown 不做尾随空格裁剪：Markdown 的两个尾随空格表示换行
+indent_size = 2
+trim_trailing_whitespace = false
+
+[*.md]
+trim_trailing_whitespace = false
+
+# 生成物与依赖目录不受约束
+[{target,node_modules,dist}/**]
+indent_style = unset

@@ -2,6 +2,7 @@ package com.gjx.controller.user;
 
 import com.gjx.common.R;
 import com.gjx.common.ResultCode;
+import com.gjx.dto.request.ChangePasswordRequest;
 import com.gjx.dto.request.UpdateUserRequest;
 import com.gjx.entity.User;
 import com.gjx.service.IUserService;
@@ -9,11 +10,10 @@ import com.gjx.util.AuthenticationUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 /**
  * 用户管理控制器
@@ -21,13 +21,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/users")
 @Tag(name = "用户管理", description = "用户相关接口")
+@RequiredArgsConstructor
 public class UserController {
 
-    @Autowired
-    private IUserService userService;
+    private final AuthenticationUtil authUtil;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    private final IUserService userService;
+
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * 获取当前用户信息
@@ -37,9 +38,8 @@ public class UserController {
     @Operation(summary = "获取当前用户信息", description = "获取当前登录用户的详细信息")
     @GetMapping("/current")
     public R<User> getCurrentUser(HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+        Long userId = authUtil.getUserIdFromRequest(request);
         User user = userService.getById(userId);
-        user.setPassword(null);
         return R.ok(user);
     }
 
@@ -55,8 +55,8 @@ public class UserController {
      */
     @Operation(summary = "更新用户信息", description = "更新当前用户的基本信息（邮箱、手机号、头像）")
     @PutMapping
-    public R<?> updateUser(@RequestBody UpdateUserRequest requestDto, HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+    public R<?> updateUser(@Valid @RequestBody UpdateUserRequest requestDto, HttpServletRequest request) {
+        Long userId = authUtil.getUserIdFromRequest(request);
         User user = userService.getById(userId);
         if (user == null) {
             return R.error(ResultCode.NOT_FOUND, "用户不存在");
@@ -77,30 +77,32 @@ public class UserController {
 
     /**
      * 修改密码
-     * @param passwordData 密码数据
+     * <p>
+     * 入参改用 {@link ChangePasswordRequest}：旧写法用 {@code Map} 接参，
+     * 字段缺失时 {@code passwordEncoder.encode(null)} 会抛异常返回 500，
+     * 且新密码长度完全不受约束。改为 DTO + {@code @Valid} 后由统一异常处理器兜住。
+     *
+     * @param passwordRequest 密码数据（原密码、新密码）
      * @param request HTTP请求
      * @return 修改结果
      */
     @Operation(summary = "修改密码", description = "修改当前用户的密码")
     @PostMapping("/password")
-    public R<?> changePassword(@RequestBody Map<String, String> passwordData, HttpServletRequest request) {
-        Long userId = AuthenticationUtil.getUserIdFromRequest(request);
+    public R<?> changePassword(@Valid @RequestBody ChangePasswordRequest passwordRequest, HttpServletRequest request) {
+        Long userId = authUtil.getUserIdFromRequest(request);
         User user = userService.getById(userId);
-        
+
         if (user == null) {
             return R.error(ResultCode.NOT_FOUND, "用户不存在");
         }
-        
-        String oldPassword = passwordData.get("oldPassword");
-        String newPassword = passwordData.get("newPassword");
-        
-        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+
+        if (!passwordEncoder.matches(passwordRequest.getOldPassword(), user.getPassword())) {
             return R.error(ResultCode.FORBIDDEN, "原密码错误");
         }
-        
-        user.setPassword(passwordEncoder.encode(newPassword));
+
+        user.setPassword(passwordEncoder.encode(passwordRequest.getNewPassword()));
         userService.updateById(user);
-        
+
         return R.ok("密码修改成功");
     }
 }

@@ -24,6 +24,8 @@
 
 <script setup>
 import { computed } from 'vue'
+import { FALLBACK_IMAGE_LARGE } from '../constants/images'
+import { money } from '../utils/format'
 
 const props = defineProps({
   product: {
@@ -34,9 +36,7 @@ const props = defineProps({
 
 defineEmits(['open', 'cart'])
 
-const imageSrc = computed(() => props.product.mainImage || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=80')
-
-const money = (value) => Number(value || 0).toFixed(2)
+const imageSrc = computed(() => props.product.mainImage || FALLBACK_IMAGE_LARGE)
 </script>
 
 <style scoped>

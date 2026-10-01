@@ -43,19 +43,19 @@
 
       <el-skeleton v-if="loading" :rows="8" animated />
 
-      <div v-else-if="filteredOrders.length === 0" class="empty">
+      <div v-else-if="orders.length === 0" class="empty">
         <el-empty description="没有找到相关订单" />
         <router-link to="/products" class="primary-link">去挑选商品</router-link>
       </div>
 
       <div v-else class="order-list">
-        <article v-for="order in filteredOrders" :key="order.id" class="order-card">
+        <article v-for="order in orders" :key="order.id" class="order-card">
           <header class="order-card-head">
             <div>
               <span>{{ formatDate(order.createTime) }}</span>
               <button type="button" @click="copyText(order.orderNo)">订单号 {{ order.orderNo }}</button>
             </div>
-            <el-tag :type="statusMeta(order.status).type" effect="light">{{ statusMeta(order.status).label }}</el-tag>
+            <el-tag :type="getOrderStatusMeta(order.status).type" effect="light">{{ getOrderStatusMeta(order.status).label }}</el-tag>
           </header>
 
           <div class="order-card-body">
@@ -66,7 +66,7 @@
                 class="goods-row"
                 :to="`/product/${item.productId}`"
               >
-                <img :src="item.productImage || fallbackImage" :alt="item.productName">
+                <img :src="item.productImage || fallbackImage" :alt="item.productName" loading="lazy">
                 <div>
                   <strong>{{ item.productName }}</strong>
                   <span>单价 ¥{{ money(item.price) }} x {{ item.quantity }}</span>
@@ -98,18 +98,33 @@
           </footer>
         </article>
       </div>
+
+      <div v-if="!loading && total > 0" class="orders-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="size"
+          :page-sizes="[10, 20, 50]"
+          :total="total"
+          layout="total, sizes, prev, pager, next"
+          @size-change="handlePageSizeChange"
+          @current-change="loadOrders"
+        />
+      </div>
     </section>
   </UserLayout>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import UserLayout from '../../components/UserLayout.vue'
 import { cartAPI, orderAPI } from '../../api'
 import { useCartStore } from '../../stores/cart'
 import { useUserStore } from '../../stores/user'
+import { getOrderStatusMeta } from '../../constants/orderStatus'
+import { FALLBACK_IMAGE } from '../../constants/images'
+import { money, formatDate } from '../../utils/format'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -117,13 +132,20 @@ const cartStore = useCartStore()
 
 const loading = ref(false)
 const orders = ref([])
+const total = ref(0)
+const page = ref(1)
+const size = ref(10)
+const statusCounts = ref({})
 const activeStatus = ref('all')
 const keyword = ref('')
 const appliedKeyword = ref('')
 const dateRange = ref([])
 const appliedDateRange = ref([])
-const fallbackImage = 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=300&q=80'
+const fallbackImage = FALLBACK_IMAGE
 
+// 筛选页签用「动作视角」措辞（回答"我该做什么"：待付款/待收货/待评价），
+// 与订单状态徽章的「状态视角」措辞（回答"这单现在是什么状态"，由 constants/orderStatus.js 提供）是两回事，
+// 因此本数组刻意不与 getOrderStatusMeta 统一，请勿"顺手"改掉。
 const statusTabs = [
   { label: '全部', value: 'all' },
   { label: '待付款', value: '0' },
@@ -132,6 +154,9 @@ const statusTabs = [
   { label: '待评价', value: '3' },
   { label: '退款/售后', value: 'service' }
 ]
+
+// 「退款/售后」一个页签覆盖两种状态：4 已取消、5 已退款。其余页签与状态码一一对应。
+const SERVICE_STATUSES = [4, 5]
 
 onMounted(async () => {
   if (!userStore.isAuthenticated) {
@@ -142,22 +167,47 @@ onMounted(async () => {
   await cartStore.getCartList()
 })
 
-const filteredOrders = computed(() => {
-  return orders.value.filter(order => {
-    const matchesStatus = activeStatus.value === 'all'
-      || (activeStatus.value === 'service' ? [4, 5].includes(order.status) : order.status === Number(activeStatus.value))
-    const text = `${order.orderNo} ${order.items.map(item => item.productName).join(' ')}`.toLowerCase()
-    const matchesKeyword = !appliedKeyword.value || text.includes(appliedKeyword.value.toLowerCase())
-    const matchesDate = !appliedDateRange.value?.length || inDateRange(order.createTime, appliedDateRange.value)
-    return matchesStatus && matchesKeyword && matchesDate
-  })
-})
+/**
+ * 页签取值 → 接口 status 参数。
+ * 用逗号拼接的字符串而非数组：Spring 的集合绑定按逗号切分，而 axios 对数组的默认序列化格式
+ * （`status=4&status=5` 还是 `status[]=4`）依赖版本，字符串写法不依赖序列化器行为。
+ */
+const statusParamOf = tabValue => {
+  if (tabValue === 'all') return undefined
+  if (tabValue === 'service') return SERVICE_STATUSES.join(',')
+  return tabValue
+}
 
+/** 关键词 / 日期这层筛选条件：列表与角标接口共用，保证两者口径一致 */
+const filterParams = () => {
+  const params = {}
+  if (appliedKeyword.value) params.keyword = appliedKeyword.value
+  if (appliedDateRange.value?.length === 2) {
+    params.startDate = appliedDateRange.value[0]
+    params.endDate = appliedDateRange.value[1]
+  }
+  return params
+}
+
+/**
+ * 加载当前页订单与页签角标。
+ *
+ * 两件事都放服务端：列表分页后，若角标仍按客户端那点数据统计，
+ * 数字只会覆盖"当前这一页"（此前是"最近 100 笔"）。两个请求并发，共用同一套筛选条件。
+ */
 const loadOrders = async () => {
   try {
     loading.value = true
-    const response = await orderAPI.getList()
-    orders.value = (response.data.data || []).map(normalizeOrder)
+    const filters = filterParams()
+    const status = statusParamOf(activeStatus.value)
+    const [listResponse, statsResponse] = await Promise.all([
+      orderAPI.getList({ ...filters, ...(status ? { status } : {}), page: page.value, size: size.value }),
+      orderAPI.getStatusCounts(filters)
+    ])
+    const pageData = listResponse.data.data || {}
+    orders.value = (pageData.records || []).map(normalizeOrder)
+    total.value = Number(pageData.total || 0)
+    statusCounts.value = statsResponse.data.data || {}
   } catch (error) {
     ElMessage.error(error.response?.data?.msg || '获取订单失败')
   } finally {
@@ -185,24 +235,24 @@ const normalizeOrder = (order) => {
   }
 }
 
-const statusMeta = status => ({
-  0: { label: '待付款', type: 'warning' },
-  1: { label: '待发货', type: 'primary' },
-  2: { label: '待收货', type: 'success' },
-  3: { label: '交易成功', type: 'info' },
-  4: { label: '已取消', type: 'danger' },
-  5: { label: '已退款', type: 'danger' }
-}[status] || { label: '未知状态', type: 'info' })
-
+/**
+ * 页签角标数字，取自服务端的按状态统计。
+ * 「全部」不单独请求：各状态数量之和就是总数，避免多一份可能与之矛盾的数字。
+ */
 const orderCount = value => {
-  if (value === 'all') return orders.value.length
-  if (value === 'service') return orders.value.filter(order => [4, 5].includes(order.status)).length
-  return orders.value.filter(order => order.status === Number(value)).length
+  const counts = statusCounts.value || {}
+  const statuses = value === 'all'
+    ? Object.keys(counts)
+    : (value === 'service' ? SERVICE_STATUSES : [Number(value)])
+  return statuses.reduce((sum, status) => sum + Number(counts[status] || 0), 0)
 }
 
+/** 提交关键词/日期筛选。条件变了就必须回到第 1 页，否则会停在一个新结果集里不存在的页码上 */
 const applyFilters = () => {
   appliedKeyword.value = keyword.value.trim()
   appliedDateRange.value = dateRange.value || []
+  page.value = 1
+  return loadOrders()
 }
 
 const resetFilters = () => {
@@ -211,17 +261,38 @@ const resetFilters = () => {
   dateRange.value = []
   appliedDateRange.value = []
   activeStatus.value = 'all'
+  page.value = 1
+  return loadOrders()
 }
 
 const handleStatusChange = () => {
   applyFilters()
 }
 
+const handlePageSizeChange = () => {
+  // 每页条数变化后原页码可能超出总页数，统一回到第 1 页
+  page.value = 1
+  return loadOrders()
+}
+
+/**
+ * 支付/取消/收货后重新加载。
+ * 订单状态变了就可能不再属于当前页签，当前页因此可能变空——回退一页，
+ * 避免用户看到"明明有订单却是空列表"。
+ */
+const reloadAfterAction = async () => {
+  await loadOrders()
+  if (orders.value.length === 0 && page.value > 1) {
+    page.value -= 1
+    await loadOrders()
+  }
+}
+
 const payOrder = async order => {
   try {
     await orderAPI.pay(order.orderNo)
     ElMessage.success('支付成功')
-    await loadOrders()
+    await reloadAfterAction()
   } catch (error) {
     ElMessage.error(error.response?.data?.msg || '支付失败')
   }
@@ -232,7 +303,7 @@ const cancelOrder = async order => {
     await ElMessageBox.confirm('确定取消该订单吗？', '取消订单', { type: 'warning' })
     await orderAPI.cancel(order.orderNo)
     ElMessage.success('订单已取消')
-    await loadOrders()
+    await reloadAfterAction()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error.response?.data?.msg || '取消订单失败')
   }
@@ -243,7 +314,7 @@ const confirmReceipt = async order => {
     await ElMessageBox.confirm('确认已经收到商品？', '确认收货', { type: 'warning' })
     await orderAPI.confirmReceipt(order.orderNo)
     ElMessage.success('确认收货成功')
-    await loadOrders()
+    await reloadAfterAction()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error.response?.data?.msg || '确认收货失败')
   }
@@ -280,12 +351,6 @@ const copyText = async text => {
 }
 
 const itemSubtotal = item => Number(item.totalPrice || Number(item.price || 0) * Number(item.quantity || 0))
-const money = value => Number(value || 0).toFixed(2)
-const formatDate = value => value ? String(value).replace('T', ' ').slice(0, 19) : '-'
-const inDateRange = (value, range) => {
-  const date = String(value || '').slice(0, 10)
-  return date >= range[0] && date <= range[1]
-}
 const copyToClipboard = async text => {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
@@ -366,6 +431,12 @@ const timelineText = order => {
 .order-list {
   display: grid;
   gap: 14px;
+}
+
+.orders-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
 .order-card {
@@ -482,6 +553,17 @@ const timelineText = order => {
   .order-summary {
     align-items: flex-start;
     border-top: 1px solid #ebeef5;
+  }
+
+  /* 窄屏下分页控件会换行，居中比右对齐更好读 */
+  .orders-pagination {
+    justify-content: center;
+  }
+
+  .orders-pagination :deep(.el-pagination) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    justify-content: center;
   }
 }
 </style>

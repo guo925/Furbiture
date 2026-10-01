@@ -51,6 +51,15 @@ const registerForm = reactive({
   email: ''
 })
 
+// 手机号校验与 AddressView.vue 保持一致（11 位中国大陆手机号）
+const validatePhone = (rule, value, callback) => {
+  if (!/^1[3-9]\d{9}$/.test(value || '')) {
+    callback(new Error('请输入11位中国大陆手机号'))
+    return
+  }
+  callback()
+}
+
 const registerRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' }
@@ -72,10 +81,11 @@ const registerRules = {
     }
   ],
   phone: [
-    { required: true, message: '请输入手机号', trigger: 'blur' }
+    { required: true, validator: validatePhone, trigger: 'blur' }
   ],
   email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' }
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
   ]
 }
 
@@ -86,7 +96,7 @@ const handleRegister = async () => {
     await registerFormRef.value.validate()
     loading.value = true
     
-    const result = await userStore.register(registerForm)
+    await userStore.register(registerForm)
     ElMessage.success('注册成功，请登录')
     router.push('/login')
   } catch (error) {

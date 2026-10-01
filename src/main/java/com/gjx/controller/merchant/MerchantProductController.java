@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
 import com.gjx.common.ResultCode;
+import com.gjx.dto.request.BatchProductIdsRequest;
+import com.gjx.dto.request.BatchProductStatusRequest;
+import com.gjx.dto.request.CreateProductRequest;
 import com.gjx.entity.Product;
 import com.gjx.enums.UserRoleEnum;
 import com.gjx.service.IProductService;
@@ -12,12 +15,11 @@ import com.gjx.util.AuthenticationUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 商家商品管理控制器
@@ -26,13 +28,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/merchant")
 @Tag(name = "商家商品管理", description = "商家商品CRUD接口")
+@RequiredArgsConstructor
 public class MerchantProductController {
 
-    @Autowired
-    private IProductService productService;
+    private final AuthenticationUtil authUtil;
 
-    @Autowired
-    private IUserService userService;
+    private final IProductService productService;
+
+    private final IUserService userService;
 
     @Operation(summary = "获取商品列表", description = "获取当前商家的商品分页列表")
     @GetMapping("/products")
@@ -59,8 +62,10 @@ public class MerchantProductController {
 
     @Operation(summary = "添加商品", description = "商家添加新商品")
     @PostMapping("/products")
-    public R<?> addProduct(@RequestBody Product product, HttpServletRequest request) {
+    public R<?> addProduct(@Valid @RequestBody CreateProductRequest productRequest, HttpServletRequest request) {
         Long merchantId = getMerchantId(request);
+        Product product = toEntity(productRequest);
+        // 归属与初始状态一律由服务端覆写，忽略请求体里的 merchantId / sales / status
         product.setMerchantId(merchantId);
         product.setSales(0);
         product.setStatus(1);
@@ -71,12 +76,14 @@ public class MerchantProductController {
 
     @Operation(summary = "更新商品", description = "商家更新自己的商品")
     @PutMapping("/products/{id}")
-    public R<?> updateProduct(@PathVariable Long id, @RequestBody Product product, HttpServletRequest request) {
+    public R<?> updateProduct(@PathVariable Long id, @Valid @RequestBody CreateProductRequest productRequest,
+                              HttpServletRequest request) {
         Long merchantId = getMerchantId(request);
         Product existing = productService.getById(id);
         if (existing == null || !existing.getMerchantId().equals(merchantId)) {
             return R.error(ResultCode.FORBIDDEN, "无权操作此商品");
         }
+        Product product = toEntity(productRequest);
         product.setId(id);
         product.setMerchantId(merchantId);
         product.setSales(existing.getSales());
@@ -84,6 +91,23 @@ public class MerchantProductController {
         log.info("[商家更新商品] productId={}, merchantId={}", id, merchantId);
         return R.ok("更新成功");
     }
+
+    /**
+     * DTO → 实体映射，只映射允许客户端提交的业务字段
+     */
+    private Product toEntity(CreateProductRequest request) {
+        Product product = new Product();
+        product.setName(request.getName());
+        product.setCategoryId(request.getCategoryId());
+        product.setBrand(request.getBrand());
+        product.setMainImage(request.getMainImage());
+        product.setPrice(request.getPrice());
+        product.setStock(request.getStock());
+        product.setDescription(request.getDescription());
+        product.setStatus(request.getStatus());
+        return product;
+    }
+
 
     @Operation(summary = "删除商品", description = "商家删除自己的商品")
     @DeleteMapping("/products/{id}")
@@ -100,12 +124,10 @@ public class MerchantProductController {
 
     @Operation(summary = "批量更新商品状态", description = "批量上下架商品")
     @PutMapping("/products/batch/status")
-    @Transactional(rollbackFor = Exception.class)
-    public R<?> batchUpdateStatus(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+    public R<?> batchUpdateStatus(@Valid @RequestBody BatchProductStatusRequest body, HttpServletRequest request) {
         Long merchantId = getMerchantId(request);
-        List<Long> ids = parseIds(body);
-        Integer status = body.get("status") instanceof Number n ? n.intValue() : null;
-        if (ids.isEmpty() || status == null) return R.error(ResultCode.PARAM_ERROR, "参数错误");
+        List<Long> ids = body.getIds();
+        Integer status = body.getStatus();
 
         // 一次性查出当前商家名下的商品，既避免逐个查询（N+1），
         // 也用数量比对严格拦截越权 ID —— 只要有一个 ID 不属于本商家就整体拒绝，不做静默跳过
@@ -124,11 +146,9 @@ public class MerchantProductController {
 
     @Operation(summary = "批量删除商品")
     @DeleteMapping("/products/batch")
-    @Transactional(rollbackFor = Exception.class)
-    public R<?> batchDelete(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+    public R<?> batchDelete(@Valid @RequestBody BatchProductIdsRequest body, HttpServletRequest request) {
         Long merchantId = getMerchantId(request);
-        List<Long> ids = parseIds(body);
-        if (ids.isEmpty()) return R.error(ResultCode.PARAM_ERROR, "参数错误");
+        List<Long> ids = body.getIds();
 
         long ownedCount = productService.count(new LambdaQueryWrapper<Product>()
                 .in(Product::getId, ids)
@@ -142,25 +162,7 @@ public class MerchantProductController {
         return R.ok("批量删除成功");
     }
 
-    /**
-     * 解析请求体中的 ID 列表
-     * <p>
-     * 不能直接强转为 {@code List<Long>}：Jackson 把 JSON 数组反序列化为 {@code Map<String,Object>}
-     * 时会生成 {@code ArrayList<Integer>}，强转后一旦访问元素即抛 ClassCastException。
-     * 这里按 {@link Number} 统一取值再转 long，兼容 Integer/Long 两种驱动行为。
-     */
-    private List<Long> parseIds(Map<String, Object> body) {
-        Object rawIds = body.get("ids");
-        if (!(rawIds instanceof List<?> rawList)) {
-            return List.of();
-        }
-        return rawList.stream()
-                .filter(Number.class::isInstance)
-                .map(item -> ((Number) item).longValue())
-                .toList();
-    }
-
     private Long getMerchantId(HttpServletRequest request) {
-        return userService.findByUsername(AuthenticationUtil.getUsernameFromRequest(request)).getId();
+        return userService.findByUsername(authUtil.getUsernameFromRequest(request)).getId();
     }
 }

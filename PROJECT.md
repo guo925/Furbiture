@@ -1,6 +1,9 @@
 # 项目信息文档（供 AI 阅读）
 
 > 本文件是 Furbiture 项目的权威技术参考。AI 在新会话中处理本项目任务前，应优先阅读本文件与 `.claude/CLAUDE.md`（协作规范），再结合具体代码做决策。
+>
+> **⚠️ 阅读顺序建议**：先读 [`docs/AI-CONTEXT.md`](docs/AI-CONTEXT.md)（项目现状快照 + 当前阻断项 + 已知坑位 + 修复进度），再回本文件看技术细节。
+> **⚠️ 本文件最后核实日期 2026-10-01**，已修正 5 处结构性漂移。若与代码不一致请以代码为准并顺手更新。
 
 ---
 
@@ -91,12 +94,11 @@ Furbiture/
 │       ├── api/                # axios 实例 + modules/（auth/admin/merchant/order/...）
 │       ├── views/
 │       │   ├── user/           # 前台页面
-│       │   ├── admin/          # 管理后台（含 backup/ 旧版备份）
+│       │   ├── admin/          # 管理后台
 │       │   └── merchant/       # 商家后台
-│       ├── components/         # 通用组件 + common/（DataTable、FormDialog）
-│       ├── composables/        # usePagination/useForm/useLoading/useTheme 等
-│       ├── directives/         # lazyLoad
-│       └── assets/styles/      # main.css、design-tokens.css
+│       ├── components/         # UserLayout、MerchantLayout、ProductCard
+│       ├── composables/        # useBreakpoint、useSearchHistory、useTheme
+│       └── assets/styles/      # main.css、design-tokens.css、element-theme.css
 └── .claude/                    # AI 协作配置（见 §9）
 ```
 
@@ -150,7 +152,9 @@ Furbiture/
 - **状态**：Pinia `stores/user.js`（token 存 `localStorage` 键 `furniture_token`、用户存 `furniture_user`）、`stores/cart.js`
 - **请求**：`api/request.js` 创建 axios 实例，`baseURL='/api'`，拦截器自动带 `Authorization: Bearer <token>`；HTTP 200 + code!=200 时统一弹错
 - **API 模块**：`api/modules/`（auth、admin、merchant、product、order、cart、address、user、file、favorite）
-- **通用组件**：`components/common/DataTable.vue`、`FormDialog.vue`
+- **通用组件**：目前只有 `components/UserLayout.vue`、`MerchantLayout.vue`、`ProductCard.vue`。
+  > ⚠️ 旧文档提到的 `components/common/DataTable.vue`、`FormDialog.vue` **并不存在**，6 个 CRUD 页各自重复实现了表格/弹窗骨架（这是已知技术债，见 `docs/code-review-2026-10-01.md`）。
+- **懒加载**：无 `directives/` 目录，`v-lazy` 指令不存在；图片懒加载需直接写原生 `loading="lazy"`（当前 12 个 `<img>` 只有 1 个加了）。
 - **图标**：Element Plus 图标全量注册为全局组件
 
 ## 7. 核心业务模块与接口
@@ -223,7 +227,7 @@ npm run dev   # http://localhost:3003
 3. **销售额口径不同**：管理员 `getTotalSales`/`getTodaySales` 只统计 `PAID` 状态订单；商家 `calcTotalSales` 统计 `PAID + DELIVERED + COMPLETED`。若两个仪表板数据对不上，是口径差异而非 bug。
 4. **日期统计**：`todayOrderCount` 依赖服务器日期（`DATE(create_time)=CURDATE()`），跨天后数值会变化，属正常行为。
 5. **`order` 表名**是 MySQL 关键字，写 SQL 必须用反引号转义。
-6. **`frontend/dist` 被 git 跟踪**：执行 `npm run build` 会改写 dist 下大量哈希文件，提交前注意还原或确认是否需要提交构建产物（本会话曾误改后 `git checkout -- frontend/dist` 还原）。
+6. **`frontend/dist` 已移出版本控制**：`git ls-files frontend/dist` 为 0，执行 `npm run build` 不会再污染提交历史。不要提交构建产物。
 7. **`merchant_audit`、`discount`** 两张表无实体，改动时注意是否影响 ORM 扫描。
 8. **单元测试目前只有** `FurnitureApplicationTests.java` 一个启动测试，`/git-save` 的 tester 阶段运行它。
 9. **启动入口**：后端 `com.gjx.FurnitureApplication`；前端 `frontend/src/main.js`。

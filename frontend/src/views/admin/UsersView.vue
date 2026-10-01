@@ -115,8 +115,9 @@
 import { ref, onMounted, reactive } from 'vue'
 import { adminAPI } from '../../api'
 import { Search, Edit, Delete, Lock } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useBreakpoint } from '../../composables/useBreakpoint'
+import { confirm } from '../../composables/useConfirm'
 
 // 弹窗宽度需要随视口变化，故用断点状态而不是写死固定宽度
 const { isMobile } = useBreakpoint()
@@ -198,7 +199,7 @@ const loadUsers = async () => {
     users.value = response.data.data.records
     total.value = response.data.data.total
   } catch (error) {
-    console.error('获取用户失败:', error)
+    console.error('获取用户失败:', error?.message)
   }
 }
 
@@ -282,20 +283,13 @@ const handleSave = async () => {
 }
 
 const handleDelete = async (id) => {
+  if (!await confirm('确定要删除这个用户吗？')) return
   try {
-    await ElMessageBox.confirm('确定要删除这个用户吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
     await adminAPI.users.delete(id)
     ElMessage.success('删除成功')
     loadUsers()
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
-    }
+    ElMessage.error(error.message || '删除失败')
   }
 }
 
