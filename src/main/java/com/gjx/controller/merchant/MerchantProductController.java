@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 商家商品管理控制器
@@ -79,8 +80,14 @@ public class MerchantProductController {
     public R<?> updateProduct(@PathVariable Long id, @Valid @RequestBody CreateProductRequest productRequest,
                               HttpServletRequest request) {
         Long merchantId = getMerchantId(request);
+        // 归属判定用 Objects.equals 而非 existing.getMerchantId().equals(merchantId)：
+        // merchant_id 存在为 NULL 的历史数据（管理员端商品创建曾不写归属，现已改为必填，
+        // 但库里可能残留这类"无主商品"）。对 NULL 归属调用 .equals 会抛 NPE →
+        // 被全局兜底成 500，把"无权操作"错报成"服务器内部错误"，也留下 403/500 的存在性探测差异。
+        // Objects.equals 下 NULL 归属与任何商家都不相等 → 403。
+        // （merchantId 来自已认证用户，必不为 NULL，所以不存在"双方都 NULL 判为相等"的漏洞）
         Product existing = productService.getById(id);
-        if (existing == null || !existing.getMerchantId().equals(merchantId)) {
+        if (existing == null || !Objects.equals(existing.getMerchantId(), merchantId)) {
             return R.error(ResultCode.FORBIDDEN, "无权操作此商品");
         }
         Product product = toEntity(productRequest);
@@ -113,8 +120,9 @@ public class MerchantProductController {
     @DeleteMapping("/products/{id}")
     public R<?> deleteProduct(@PathVariable Long id, HttpServletRequest request) {
         Long merchantId = getMerchantId(request);
+        // 同 updateProduct：NULL 归属（管理员创建的商品）不能走 .equals，否则 500
         Product existing = productService.getById(id);
-        if (existing == null || !existing.getMerchantId().equals(merchantId)) {
+        if (existing == null || !Objects.equals(existing.getMerchantId(), merchantId)) {
             return R.error(ResultCode.FORBIDDEN, "无权操作此商品");
         }
         productService.removeById(id);

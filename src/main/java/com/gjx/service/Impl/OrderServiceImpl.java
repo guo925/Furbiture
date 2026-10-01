@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.gjx.common.BusinessException;
+import com.gjx.common.ResultCode;
 import com.gjx.entity.*;
 import com.gjx.enums.NotificationTypeEnum;
 import com.gjx.enums.OrderStatusEnum;
@@ -523,6 +524,66 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
         queryWrapper.orderByDesc(Order::getCreateTime);
         return page(new Page<>(page, size), queryWrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean adminChangeStatus(Long orderId, OrderStatusEnum targetStatus) {
+        Order order = getById(orderId);
+        if (order == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "订单不存在");
+        }
+        OrderStatusEnum currentStatus = OrderStatusEnum.fromCode(order.getStatus());
+        if (currentStatus == null) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "订单当前状态异常，无法流转");
+        }
+        if (currentStatus == targetStatus) {
+            return false;                       // 幂等：重复提交不报错，也不产生任何写入
+        }
+        if (!currentStatus.canTransitionTo(targetStatus)) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR,
+                    "不允许从「" + currentStatus.getDescription() + "」变更为「" + targetStatus.getDescription() + "」");
+        }
+
+        boolean refunding = targetStatus == OrderStatusEnum.REFUNDED;
+        LambdaUpdateWrapper<Order> updateWrapper = new LambdaUpdateWrapper<Order>()
+                .eq(Order::getId, orderId)
+                // 期望的前置状态进 WHERE：这样"检查"与"更新"之间即便被并发修改也写不坏数据（防 TOCTOU）
+                .eq(Order::getStatus, currentStatus.getCode())
+                .set(Order::getStatus, targetStatus.getCode());
+        // 每种目标状态各有自己的时间戳字段，正常流转路径（mockPay / deliverOrder /
+        // confirmReceive / cancelPendingOrder / requestRefund）都会写。强制流转同样必须写：
+        // 前端订单卡片的"付款/发货/完成/取消时间"直接读这些字段，不写就是空白。
+        LocalDateTime now = LocalDateTime.now();
+        switch (targetStatus) {
+            case PAID -> updateWrapper.set(Order::getPayTime, now);
+            case DELIVERED -> updateWrapper.set(Order::getDeliveryTime, now);
+            case COMPLETED -> updateWrapper.set(Order::getFinishTime, now);
+            case CANCELLED -> updateWrapper.set(Order::getCancelTime, now);
+            // 退款字段与 requestRefund 同口径：金额取整单金额，时间取当前。
+            // 退款原因不编造、保持为空——这是管理员强制操作，没有买家填写的理由
+            case REFUNDED -> updateWrapper
+                    .set(Order::getRefundAmount, order.getTotalAmount())
+                    .set(Order::getRefundTime, now);
+            // 没有任何迁移以「待付款」为目标（canTransitionTo 已排除回流），此分支不可达
+            case PENDING_PAYMENT -> { }
+        }
+        if (baseMapper.update(null, updateWrapper) == 0) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "订单状态已被其他操作变更，请刷新后重试");
+        }
+
+        // 只有"货还没出库"的流转才回补库存，否则会出现"货在买家手上、库存却已恢复"导致超卖：
+        //   → 已取消：来源必然是待付款（未付款但库存在下单时已扣）      ⇒ 回补
+        //   → 已退款：来源是已付款（未发货）⇒ 回补；来源是已发货/已完成 ⇒ 不回补
+        boolean releasingStock = targetStatus == OrderStatusEnum.CANCELLED
+                || (refunding && currentStatus == OrderStatusEnum.PAID);
+        if (releasingStock) {
+            restoreStock(orderId);
+        }
+
+        log.info("[管理员变更订单状态] orderId={}, {} -> {}, 回补库存={}",
+                orderId, currentStatus.getCode(), targetStatus.getCode(), releasingStock);
+        return true;
     }
 
     @Override

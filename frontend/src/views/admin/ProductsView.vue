@@ -43,6 +43,11 @@
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="所属商家" width="120">
+          <!-- 从商家列表反查名称，而不是依赖 product.merchantName：
+               后者依赖冗余列被正确写入，merchant_id 才是唯一的真相来源 -->
+          <template #default="{ row }">{{ merchantNameOf(row.merchantId) }}</template>
+        </el-table-column>
         <el-table-column prop="price" label="价格" width="100" sortable>
           <template #default="{ row }">
             <span class="price-tag">¥{{ row.price }}</span>
@@ -91,6 +96,16 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="商品名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入商品名称" />
+        </el-form-item>
+        <el-form-item label="所属商家" prop="merchantId">
+          <!-- 归属必填：merchant_id 是商家端一切归属判定的起点，留空的商品
+               不会出现在任何商家端、订单也不会通知任何商家 -->
+          <el-select v-model="form.merchantId" placeholder="选择商品所属商家" style="width:100%">
+            <el-option
+              v-for="m in merchants" :key="m.id"
+              :label="m.username" :value="m.id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="品牌" prop="brand">
           <el-input v-model="form.brand" placeholder="如：宜家、全友" />
@@ -172,18 +187,23 @@ const searchKeyword = ref('')
 const filterStatus = ref(null)
 
 const categories = ref([])
+const merchants = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const saving = ref(false)
 const formRef = ref(null)
 
-const defaultForm = { name: '', brand: '', categoryId: null, price: 0, stock: 0, statusBool: true, mainImage: '', description: '' }
+const defaultForm = { name: '', brand: '', categoryId: null, merchantId: null, price: 0, stock: 0, statusBool: true, mainImage: '', description: '' }
 const form = reactive({ ...defaultForm })
 const rules = {
   name: [{ required: true, message: '请输入商品名称', trigger: 'blur' }],
+  merchantId: [{ required: true, message: '请选择所属商家', trigger: 'change' }],
   price: [{ required: true, message: '请输入价格', trigger: 'blur' }],
   categoryId: [{ required: true, message: '请选择分类', trigger: 'change' }]
 }
+
+/** 由 merchant_id 反查商家名；查不到（历史脏数据）时给出明确占位而不是空白 */
+const merchantNameOf = id => merchants.value.find(m => m.id === id)?.username || '—'
 
 const loadData = async () => {
   loading.value = true
@@ -201,6 +221,14 @@ const loadCategories = async () => {
   try {
     const res = await categoryAPI.getList()
     categories.value = res.data.data || []
+  } catch { /* ignore */ }
+}
+
+const loadMerchants = async () => {
+  try {
+    // 后端已按 role=MERCHANT 过滤，这一页只可能是商家
+    const res = await adminAPI.users.getMerchants({ page: 1, size: 100 })
+    merchants.value = res.data.data?.records || []
   } catch { /* ignore */ }
 }
 
@@ -272,6 +300,7 @@ const resetForm = () => {
 onMounted(() => {
   loadData()
   loadCategories()
+  loadMerchants()
 })
 </script>
 

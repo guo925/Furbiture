@@ -86,6 +86,19 @@ class PasswordSerializationTest {
     }
 
     @Test
+    @DisplayName("toString() 不得带出密码哈希 —— 日志打印实体是 JSON 防线拦不住的另一条路")
+    void shouldNotExposePasswordViaToString() {
+        // @JsonProperty(WRITE_ONLY) 只管 Jackson 序列化。@Data 生成的 toString() 会拼上每个字段，
+        // 而 log.info("{}", user) 这种写法在项目里很常见——一旦有人这么写，密码哈希就进日志文件了。
+        // 本断言钉住 @ToString.Exclude 不被误删。
+        String text = userWithPassword().toString();
+
+        assertFalse(text.contains(FAKE_HASH), "密码哈希出现在 toString() 中：" + text);
+        // 同时确认不是把整个 toString 砍掉了（过度修复）
+        assertTrue(text.contains("admin"), "其余字段应保留：" + text);
+    }
+
+    @Test
     @DisplayName("反序列化（写入）方向必须仍然可用：注册/建用户时 password 要能正常接收")
     void shouldStillDeserializePasswordOnWrite() throws Exception {
         // WRITE_ONLY 的语义是"只写不读"。若误改成 @JsonIgnore，注册与改密功能会静默失效——

@@ -31,14 +31,15 @@ public class AdminUserController {
 
     private final PasswordEncoder passwordEncoder;
 
-    @Operation(summary = "获取用户列表", description = "获取所有用户列表，支持分页和用户名搜索")
+    @Operation(summary = "获取用户列表", description = "获取所有用户列表，支持分页、用户名搜索与角色过滤")
     @GetMapping
     public R<Page<User>> list(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
-            @RequestParam(required = false) String username) {
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String role) {
         // 密码字段由 User.password 上的 @JsonProperty(WRITE_ONLY) 保证不会被序列化输出
-        Page<User> userPage = userService.adminListUsers(page, size, username);
+        Page<User> userPage = userService.adminListUsers(page, size, username, role);
         return R.ok(userPage);
     }
 

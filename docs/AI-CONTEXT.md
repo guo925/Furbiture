@@ -20,7 +20,7 @@
 | 前端 | Vue 3.4 + Vite 5 + Element Plus + Pinia + Vue Router 4 + Axios + ECharts 6 |
 | 端口 | 后端 `9090` ｜ 前端开发 `3003` ｜ Vite 代理 `/api`、`/uploads` → 9090 |
 | 数据库 | `furniture_db` @ `localhost:3306` ｜ Redis @ `localhost:6379` |
-| 规模 | 后端 134 个源文件（另 8 个测试类）｜ 前端 `src/` 68 个文件（38 `.vue` + 27 `.js` + 3 样式）｜ `scripts/` 4 个检查脚本 |
+| 规模 | 后端 135 个源文件（另 8 个测试类）｜ 前端 `src/` 68 个文件（38 `.vue` + 27 `.js` + 3 样式）｜ `scripts/` 4 个检查脚本 |
 
 > ⚠️ **Java 17 而非 21**。同一台机器上其他项目多为 21，切项目时务必看 `pom.xml` 的 `<java.version>`。
 
@@ -31,7 +31,7 @@
 | 检查项 | 结果 | 命令 |
 |---|---|---|
 | 编译 | ✅ **BUILD SUCCESS**（135 个源文件，仅 2 条既有 `RedisConfig` 过期 API 警告） | `mvn -B -DskipTests clean compile` |
-| 测试 | ✅ **70 通过 / 0 失败 / 0 跳过** | `mvn -B test` |
+| 测试 | ✅ **71 通过 / 0 失败 / 0 跳过** | `mvn -B test` |
 | 覆盖率 | ⚠️ 行 **11%** / 分支 **8%**（JaCoCo 已接入，**刻意未设阈值**——设了必红） | `mvn -B test`（自动产出报告） |
 | 架构规则 | ✅ **ArchUnit 6 条规则全部启用**，0 违规 | `mvn -B test` |
 | 前端 lint | ✅ 退出码 0，零错误零警告 | `cd frontend && npm run lint` |
@@ -154,9 +154,13 @@ Furbiture/
 │   ├── task/                     # OrderTimeoutTask
 │   └── util/                     # AuthenticationUtil、ValidationUtil
 ├── src/test/java/com/gjx/
-│   ├── architecture/ArchitectureRulesTest.java   # ArchUnit 6 条架构规则
-│   ├── enums/OrderStatusEnumTest.java            # 状态迁移规则（33 个用例）
-│   └── security/PasswordSerializationTest.java   # 密码序列化防护（4 个用例）
+│   ├── architecture/ArchitectureRulesTest.java          # ArchUnit 6 条架构规则
+│   ├── enums/OrderStatusEnumTest.java                   # 状态迁移规则（33 个用例）
+│   ├── security/PasswordSerializationTest.java          # 密码不外泄：JSON 三种形态 + toString（5 个用例）
+│   ├── task/OrderTimeoutTaskTest.java                   # 超时任务多实例互斥（fail-open，5 个用例）
+│   ├── util/AuthenticationUtilTest.java                 # token 解析失败按未认证处理（6 个用例）
+│   ├── service/Impl/OrderServiceImplTest.java           # 订单查询条件：参数化 / OR 块括号 / 与计数口径一致（12 个）
+│   └── service/Impl/MerchantDashboardServiceImplTest.java # 低库存边界与在售过滤（3 个）
 └── frontend/src/
     ├── api/                      # request.js（axios + 401 闸门）+ modules/（11 个 API 模块）
     ├── stores/                   # user.js、cart.js
@@ -362,6 +366,29 @@ docker exec -i seckill-mysql mysql -uroot -p123456 furniture_db < database/reset
 - [x] **批次 10**：用户端订单列表分页改造（状态计数 / 关键词 / 日期筛选全部下沉服务端）
 - [x] **批次 11**：商家仪表板去假数据（待办清单 / 店铺健康全部由真实统计派生）
 - [x] **批次 12**：死代码清理 + 鉴权链路取证 + 开发库数据回填
+- [x] **批次 13**：商品归属闭环（消除"无主商品"）+ 管理员改状态的副作用 + 订单出参 VO 化
+
+### 批次 13 的关键修复
+
+| 原问题 | 状态 |
+|---|---|
+| `AdminProductController.create` 不写 `merchant_id` → 管理员建的商品成为**无主孤儿**：商家端永远看不见、订单不向任何商家推通知 | ✅ 归属改为**必填**：`CreateProductRequest.merchantId` 显式声明 + 服务端校验（必须存在且角色为 `MERCHANT`，两类失败分开报错）；管理端表单加「所属商家」下拉 + 列表加「所属商家」列。商家端仍一律以登录身份覆写，**无法自改归属**（已实测：merchant1 传 `merchantId=4` 落库仍是 3） |
+| `MerchantProductController` 的 `existing.getMerchantId().equals(...)` 未判空 → 商家操作无主商品时 NPE → **500**（把"无权"错报成"服务器错误"，且 403/500 差异可用来探测商品是否存在） | ✅ 改 `Objects.equals(...)`；无主商品与不存在的商品现在返回**同一个 403**。`updateProduct` 同时补上对 `updateById` 返回值的判断（原先商品不存在也报"更新成功"） |
+| `AdminOrderController` 改状态为已取消/已退款时**不回补库存、不写退款字段** → 库存永久少一份、对账对不上 | ✅ 下沉为 `IOrderService.adminChangeStatus`（原子 + `@Transactional`，Controller 不再需要事务，也不违反 ArchUnit）。口径与 `requestRefund` 对齐：**已取消→回补**（来源必然是待付款）；**已退款→仅当来源是已付款时回补**，已发货/已完成不回补（货在买家手上）。退款写 `refund_amount`/`refund_time` |
+| `OrderController.list` 手工 `Map.put` 拼 12 个字段（字段名是字符串，写错编译期不报错） | ✅ 新增 `OrderListItemVO`；**响应 JSON 形状逐字段保持一致**（含 null 字段仍按全局 `non_null` 策略省略），前端无需改动 |
+| `UserServiceImpl.adminListUsers` 的用户名 OR 块**没有括号** | ✅ 补括号。不补的话新增的 `role` 过滤会被 `or` 吞掉——`?role=MERCHANT&username=admin` 会把 ADMIN 角色的 admin 当成商家列出来（已实测修复：该查询现在返回空） |
+| `User` 实体的 `@Data` 会生成带 `password` 的 `toString()` | ✅ 加 `@ToString.Exclude` + 测试。当前无人把实体写进日志，属提前堵住"日志泄露凭据"这条路 |
+
+#### 顺带发现（未修，留给后续）
+
+- **商家端「发货」按钮无错误处理**：`MerchantOrders.vue` 的 `handleShip` 没有 `try/catch`，
+  而后端 `deliverOrderByMerchant` 失败时走 `BusinessException` → axios 拒绝 → **未捕获的 Promise 拒绝，用户看不到任何提示**。
+  这与本批次修的 `AdminOrdersView` 是同一问题（后者已修）。项目此前声明"6 处未捕获的 Promise 拒绝已统一到 useConfirm"，
+  但 API 调用本身仍有无 catch 的地方。
+- **`@OperationLog` 注解零使用**：`OperationLogAspect` 只在自己的 javadoc 里被提到，全项目**没有任何方法标注它**。
+  属"看起来实现了、实际从未生效"——要么接线，要么删掉。
+- **管理员改状态不通知买家**：`requestRefund` 会给商家推通知，但管理员强制取消/退款不通知任何人。
+  要补的话需要先给 `NotificationTypeEnum` 加"订单被取消"这类类型（现有 `ORDER_REFUNDED` 的文案是「订单退款申请」，语义是买家申请，套用会误导）。
 
 ### 批次 12 的关键修复
 
@@ -472,7 +499,7 @@ JS gzip                      791 kB      488 kB   −303 kB
 
 ## 九·补、本轮新增的测试与护栏
 
-**测试：44 → 49 → 61 → 64 → 70**（`mvn test` 全绿），新增的都做过**变异测试**（改坏必须变红）：
+**测试：44 → 49 → 61 → 64 → 70 → 71**（`mvn test` 全绿），新增的都做过**变异测试**（改坏必须变红）：
 
 | 测试 | 钉住的属性 | 变异验证 |
 |---|---|---|

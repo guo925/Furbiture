@@ -27,6 +27,8 @@ export const adminAPI = {
   },
   users: {
     getList: (params) => request.get('/admin/users', { params }),
+    // 只取商家角色的用户，供「商品所属商家」下拉使用
+    getMerchants: (params) => request.get('/admin/users', { params: { ...params, role: 'MERCHANT' } }),
     create: (data) => request.post('/admin/users', data),
     update: (id, data) => request.put(`/admin/users/${id}`, data),
     delete: (id) => request.delete(`/admin/users/${id}`),

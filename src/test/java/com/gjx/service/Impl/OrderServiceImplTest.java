@@ -1,10 +1,16 @@
 package com.gjx.service.Impl;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.gjx.common.BusinessException;
 import com.gjx.entity.Order;
+import com.gjx.entity.OrderItem;
+import com.gjx.enums.OrderStatusEnum;
 import com.gjx.mapper.AddressMapper;
 import com.gjx.mapper.CartMapper;
 import com.gjx.mapper.OrderItemMapper;
@@ -12,6 +18,7 @@ import com.gjx.mapper.OrderMapper;
 import com.gjx.mapper.ProductMapper;
 import com.gjx.service.INotificationService;
 import com.gjx.service.IProductService;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,13 +28,20 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -81,6 +95,15 @@ class OrderServiceImplTest {
                 addressMapper, productService, notificationService);
         // baseMapper 是 ServiceImpl 的 protected 字段，@InjectMocks 不会注入，只能显式塞进去
         ReflectionTestUtils.setField(orderService, "baseMapper", orderMapper);
+        // LambdaUpdateWrapper 求值 SET 子句时要查 TableInfo 缓存，而该缓存由 MyBatis 运行时
+        // 在 Mapper 初始化时填充；本测试不起 Spring 上下文，故手动注册（同 MerchantDashboardServiceImplTest）
+        initTableInfoCache(Order.class);
+    }
+
+    private static void initTableInfoCache(Class<?> entityClass) {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
+        assistant.setCurrentNamespace(entityClass.getName());
+        TableInfoHelper.initTableInfo(assistant, entityClass);
     }
 
     // ---------- 承诺 ①：关键词参数化 ----------
@@ -240,7 +263,210 @@ class OrderServiceImplTest {
                         && boundValues(wrapper).containsValue(5)));
     }
 
+    // ---------- 管理员强制流转：库存回补方向（写错就是超卖或少卖）----------
+
+    @Test
+    @DisplayName("强制取消待付款订单 → 回补库存（库存在下单时已扣，不回补就是永久少一份）")
+    void adminCancelRestoresStock() {
+        stubOrder(23L, OrderStatusEnum.PENDING_PAYMENT.getCode(), "90.00");
+        stubSuccessfulUpdate();
+        stubOneOrderItem();
+        when(productMapper.restoreStockAndSales(10L, 3)).thenReturn(1);
+
+        assertThat(orderService.adminChangeStatus(23L, OrderStatusEnum.CANCELLED)).isTrue();
+
+        verify(productMapper).restoreStockAndSales(10L, 3);
+    }
+
+    @Test
+    @DisplayName("强制退还未发货订单（已付款）→ 回补库存")
+    void adminRefundUnshippedRestoresStock() {
+        stubOrder(24L, OrderStatusEnum.PAID.getCode(), "60.00");
+        stubSuccessfulUpdate();
+        stubOneOrderItem();
+        when(productMapper.restoreStockAndSales(10L, 3)).thenReturn(1);
+
+        assertThat(orderService.adminChangeStatus(24L, OrderStatusEnum.REFUNDED)).isTrue();
+
+        verify(productMapper).restoreStockAndSales(10L, 3);
+    }
+
+    @Test
+    @DisplayName("强制退还已发货订单 → **不回补**库存（货在买家手上，补了就是超卖）")
+    void adminRefundShippedDoesNotRestoreStock() {
+        stubOrder(25L, OrderStatusEnum.DELIVERED.getCode(), "150.00");
+        stubSuccessfulUpdate();
+        stubOneOrderItem();
+
+        assertThat(orderService.adminChangeStatus(25L, OrderStatusEnum.REFUNDED)).isTrue();
+
+        // 这是本组测试里最要紧的一条：方向写反会让同一件货既在买家手上、又能再卖一次
+        verify(productMapper, never()).restoreStockAndSales(anyLong(), anyInt());
+        verify(productMapper, never()).increaseStock(anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("已完成订单强制退款 → 同样不回补库存")
+    void adminRefundCompletedDoesNotRestoreStock() {
+        stubOrder(26L, OrderStatusEnum.COMPLETED.getCode(), "150.00");
+        stubSuccessfulUpdate();
+        stubOneOrderItem();
+
+        assertThat(orderService.adminChangeStatus(26L, OrderStatusEnum.REFUNDED)).isTrue();
+
+        verify(productMapper, never()).restoreStockAndSales(anyLong(), anyInt());
+    }
+
+    // ---------- 管理员强制流转：状态机与时间戳 ----------
+
+    @Test
+    @DisplayName("非法迁移被拒绝，且一个字段都不写")
+    void adminChangeStatusRejectsIllegalTransition() {
+        stubOrder(27L, OrderStatusEnum.CANCELLED.getCode(), "10.00");
+
+        assertThatThrownBy(() -> orderService.adminChangeStatus(27L, OrderStatusEnum.PAID))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不允许从");
+
+        verify(orderMapper, never()).update(any(), any());
+    }
+
+    @Test
+    @DisplayName("目标状态与当前相同 → 幂等返回 false，不产生写入")
+    void adminChangeStatusIsIdempotent() {
+        stubOrder(28L, OrderStatusEnum.PAID.getCode(), "10.00");
+
+        assertThat(orderService.adminChangeStatus(28L, OrderStatusEnum.PAID)).isFalse();
+
+        verify(orderMapper, never()).update(any(), any());
+    }
+
+    @Test
+    @DisplayName("并发冲突（期望前置状态已被改掉，影响行数 0）→ 抛业务异常而不是静默成功")
+    void adminChangeStatusRejectsOnConcurrentConflict() {
+        stubOrder(29L, OrderStatusEnum.PENDING_PAYMENT.getCode(), "10.00");
+        when(orderMapper.update(isNull(), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> orderService.adminChangeStatus(29L, OrderStatusEnum.CANCELLED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("已被其他操作变更");
+    }
+
+    @Test
+    @DisplayName("强制取消会写 cancel_time —— 前端订单卡片直接读它，不写就是空白")
+    void adminCancelWritesCancelTime() {
+        stubOrder(30L, OrderStatusEnum.PENDING_PAYMENT.getCode(), "10.00");
+        stubSuccessfulUpdate();
+        stubOneOrderItem();
+
+        orderService.adminChangeStatus(30L, OrderStatusEnum.CANCELLED);
+
+        assertThat(capturedUpdateSetClause()).contains("cancel_time");
+    }
+
+    @Test
+    @DisplayName("强制退款写退款金额与退款时间（金额取整单金额，与 requestRefund 同口径）")
+    void adminRefundWritesRefundFields() {
+        stubOrder(31L, OrderStatusEnum.DELIVERED.getCode(), "150.00");
+        stubSuccessfulUpdate();
+
+        orderService.adminChangeStatus(31L, OrderStatusEnum.REFUNDED);
+
+        assertThat(capturedUpdateSetClause())
+                .contains("refund_amount")
+                .contains("refund_time");
+        assertThat(updateBoundValues()).containsValue(new BigDecimal("150.00"));
+    }
+
+    @Test
+    @DisplayName("转为已付款写 pay_time")
+    void adminChangeToPaidWritesPayTime() {
+        assertThat(setClauseOf(32L, OrderStatusEnum.PENDING_PAYMENT, OrderStatusEnum.PAID))
+                .contains("pay_time");
+    }
+
+    @Test
+    @DisplayName("转为已发货写 delivery_time")
+    void adminChangeToDeliveredWritesDeliveryTime() {
+        assertThat(setClauseOf(33L, OrderStatusEnum.PAID, OrderStatusEnum.DELIVERED))
+                .contains("delivery_time");
+    }
+
+    @Test
+    @DisplayName("转为已完成写 finish_time")
+    void adminChangeToCompletedWritesFinishTime() {
+        assertThat(setClauseOf(34L, OrderStatusEnum.DELIVERED, OrderStatusEnum.COMPLETED))
+                .contains("finish_time");
+    }
+
     // ---------- 辅助 ----------
+
+    /** 让 getById 返回一个指定状态的订单（不桩 update——被拒绝的路径本来就不该调它） */
+    private void stubOrder(Long orderId, Integer status, String totalAmount) {
+        Order order = new Order();
+        order.setId(orderId);
+        order.setStatus(status);
+        order.setTotalAmount(new BigDecimal(totalAmount));
+        when(orderMapper.selectById(orderId)).thenReturn(order);
+    }
+
+    /** 让条件更新报告「影响 1 行」 */
+    private void stubSuccessfulUpdate() {
+        when(orderMapper.update(isNull(), any())).thenReturn(1);
+    }
+
+    /**
+     * 给订单放一条 quantity=3 的明细。
+     *
+     * <p><b>为什么「不回补库存」的用例也必须调它：</b>{@code restoreStock} 是按明细逐条回补的，
+     * 明细为空时它直接 return，{@code restoreStockAndSales} 根本不会被调用——
+     * 于是 {@code verify(..., never())} 无论代码对错都成立，测试变成空断言
+     * （这处正是靠变异测试发现的：把「已发货退款不回补」改成「一律回补」，测试居然全绿）。
+     *
+     * <p>用 {@code lenient()} 是因为在正确实现下这条桩确实不会被用到（不会走到 restoreStock），
+     * 而 Mockito 严格模式会把「未使用的桩」判为失败。它是测试数据准备，不是被验证的期望，
+     * 放宽它不会削弱任何断言——回补方向仍由 {@code verify(productMapper)} 精确把关。
+     */
+    private void stubOneOrderItem() {
+        OrderItem item = new OrderItem();
+        item.setOrderId(23L);
+        item.setProductId(10L);
+        item.setQuantity(3);
+        lenient().when(orderItemMapper.selectList(any())).thenReturn(List.of(item));
+    }
+
+    private String setClauseOf(Long orderId, OrderStatusEnum from, OrderStatusEnum to) {
+        stubOrder(orderId, from.getCode(), "10.00");
+        stubSuccessfulUpdate();
+        if (to == OrderStatusEnum.CANCELLED) {
+            stubOneOrderItem();
+        }
+        orderService.adminChangeStatus(orderId, to);
+        return capturedUpdateSetClause();
+    }
+
+    /** 取回发给 Mapper 的 UPDATE 语句的 SET 子句 */
+    private String capturedUpdateSetClause() {
+        return capturedUpdateWrapper().getSqlSet();
+    }
+
+    /** 取回发给 Mapper 的 UPDATE 包装器（断言 SET 子句与绑定值都从它读） */
+    @SuppressWarnings("unchecked")
+    private LambdaUpdateWrapper<Order> capturedUpdateWrapper() {
+        ArgumentCaptor<LambdaUpdateWrapper<Order>> captor =
+                ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
+        verify(orderMapper).update(isNull(), captor.capture());
+        return captor.getValue();
+    }
+
+    /** UPDATE 的绑定值（先取一次 SET 子句触发延迟渲染，否则会拿到空 Map） */
+    private Map<String, Object> updateBoundValues() {
+        LambdaUpdateWrapper<Order> wrapper = capturedUpdateWrapper();
+        wrapper.getSqlSet();
+        return wrapper.getParamNameValuePairs();
+    }
+
+
 
     /**
      * 取 WHERE 部分。{@code getSqlSegment()} 还会带上 GROUP BY / ORDER BY，

@@ -131,18 +131,29 @@ const showDetail = async (row) => {
   drawerVisible.value = true
 }
 
+// 状态变更失败必须给出提示：后端的状态机校验（迁移白名单 + 期望前置状态进 WHERE）
+// 会把"页面数据已过期、订单已被别处改过"这类情况拒绝成 403/409，
+// 少了 catch 就变成"没有任何反应"的静默失败——用户不知道是没点上还是被拒绝了。
 const handleDeliver = async (row) => {
   if (!await confirm(`确认对订单 ${row.orderNo?.substring(0, 12)} 执行发货？`, '确认发货')) return
-  await adminAPI.orders.updateStatus(row.id, 2)
-  ElMessage.success('发货成功')
-  loadData()
+  try {
+    await adminAPI.orders.updateStatus(row.id, 2)
+    ElMessage.success('发货成功')
+    loadData()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.msg || '发货失败')
+  }
 }
 
 const handleCancel = async (row) => {
   if (!await confirm(`确定取消订单 ${row.orderNo?.substring(0, 12)}？`, '取消确认')) return
-  await adminAPI.orders.updateStatus(row.id, 4)
-  ElMessage.success('已取消')
-  loadData()
+  try {
+    await adminAPI.orders.updateStatus(row.id, 4)
+    ElMessage.success('已取消')
+    loadData()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.msg || '取消订单失败')
+  }
 }
 
 onMounted(() => loadData())

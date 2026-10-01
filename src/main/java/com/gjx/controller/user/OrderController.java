@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.gjx.common.R;
 import com.gjx.common.ResultCode;
 import com.gjx.dto.request.RefundRequest;
+import com.gjx.dto.response.OrderListItemVO;
 import com.gjx.entity.Order;
 import com.gjx.entity.OrderItem;
 import com.gjx.service.IOrderService;
@@ -16,7 +17,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -125,7 +125,7 @@ public class OrderController {
      */
     @Operation(summary = "获取用户订单列表", description = "分页获取当前用户的订单列表，支持状态筛选、关键词搜索与下单日期区间筛选")
     @GetMapping
-    public R<Page<Map<String, Object>>> list(@RequestParam(required = false) List<Integer> status,
+    public R<Page<OrderListItemVO>> list(@RequestParam(required = false) List<Integer> status,
                   @RequestParam(required = false) String keyword,
                   @RequestParam(required = false) String startDate,
                   @RequestParam(required = false) String endDate,
@@ -139,24 +139,12 @@ public class OrderController {
         List<Long> orderIds = orderPage.getRecords().stream().map(Order::getId).toList();
         Map<Long, List<OrderItem>> itemsByOrderId = orderService.getOrderItemsByOrderIds(orderIds);
 
-        Page<Map<String, Object>> resultPage =
+        Page<OrderListItemVO> resultPage =
                 new Page<>(orderPage.getCurrent(), orderPage.getSize(), orderPage.getTotal());
-        resultPage.setRecords(orderPage.getRecords().stream().map(order -> {
-            Map<String, Object> item = new HashMap<>();
-            item.put("id", order.getId());
-            item.put("orderNo", order.getOrderNo());
-            item.put("userId", order.getUserId());
-            item.put("addressId", order.getAddressId());
-            item.put("totalAmount", order.getTotalAmount());
-            item.put("status", order.getStatus());
-            item.put("payTime", order.getPayTime());
-            item.put("deliveryTime", order.getDeliveryTime());
-            item.put("finishTime", order.getFinishTime());
-            item.put("cancelTime", order.getCancelTime());
-            item.put("createTime", order.getCreateTime());
-            item.put("orderItems", itemsByOrderId.getOrDefault(order.getId(), List.of()));
-            return item;
-        }).toList());
+        resultPage.setRecords(orderPage.getRecords().stream()
+                .map(order -> OrderListItemVO.from(order,
+                        itemsByOrderId.getOrDefault(order.getId(), List.of())))
+                .toList());
         return R.ok(resultPage);
     }
 

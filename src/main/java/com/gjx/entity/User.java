@@ -3,6 +3,7 @@ package com.gjx.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -28,8 +29,14 @@ public class User {
      * <p>
      * {@code WRITE_ONLY} 表示只允许反序列化（写入）、永不序列化输出：
      * 从根上杜绝任何接口把密码哈希吐给前端，无需每个返回用户的地方再手工 {@code setPassword(null)}。
+     * <p>
+     * {@code @ToString.Exclude} 堵的是另一条路：{@code @Data} 生成的 {@code toString()} 默认会把
+     * 每个字段都拼进去，而日志打印实体是常见操作——一旦有人写了 {@code log.info("{}", user)}，
+     * JSON 那道防线完全拦不住，密码哈希会直接落到日志文件里（违反「禁止把凭据写进日志」红线）。
+     * 当前代码没有这样的调用点，这里是把隐患提前钉死。
      */
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @ToString.Exclude
     private String password;
     
     /**

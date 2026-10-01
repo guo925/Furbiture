@@ -16,12 +16,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
-    public Page<User> adminListUsers(Integer page, Integer size, String username) {
+    public Page<User> adminListUsers(Integer page, Integer size, String username, String role) {
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
         if (username != null && !username.isEmpty()) {
-            queryWrapper.like(User::getUsername, username)
+            // 整块必须包在 and(...) 里。写成 username LIKE ? OR phone LIKE ? 时，
+            // 与下面按角色过滤的 role = ? 组合会变成 A OR (B AND C)——
+            // 只命中用户名的记录会**无视角色过滤**混进来（列商家时列出普通买家）。
+            queryWrapper.and(wrapper -> wrapper
+                    .like(User::getUsername, username)
                     .or()
-                    .like(User::getPhone, username);
+                    .like(User::getPhone, username));
+        }
+        if (role != null && !role.isBlank()) {
+            queryWrapper.eq(User::getRole, role);
         }
         queryWrapper.orderByDesc(User::getCreateTime);
         return page(new Page<>(page, size), queryWrapper);

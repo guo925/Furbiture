@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.gjx.entity.Order;
 import com.gjx.entity.OrderItem;
+import com.gjx.enums.OrderStatusEnum;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -184,4 +185,26 @@ public interface IOrderService extends IService<Order> {
      * @return 热门商品列表
      */
     List<Map<String, Object>> getHotProducts(int limit);
+
+    /**
+     * 管理员应急通道：把订单强制变更为目标状态，并补齐该状态应有的副作用。
+     *
+     * <p><b>为什么放在 Service 而不是 Controller：</b>状态变更与库存回补必须原子完成，
+     * 而 ArchUnit 规则禁止 Controller 带 {@code @Transactional}。这段逻辑原先写在
+     * {@code AdminOrderController} 里且只改 {@code order.status}，于是「已取消 / 已退款」的订单
+     * 库存永不回补（永久少一份）、退款金额与退款时间不落库（对账对不上）。
+     *
+     * <p><b>库存回补口径</b>（与 {@link #requestRefund} 保持一致，只回补「货还没出库」的流转）：
+     * <ul>
+     *   <li>→ 已取消：来源必然是待付款，库存在下单时已扣，故必须回补。</li>
+     *   <li>→ 已退款：来源是已付款（未发货）时回补；来源是已发货 / 已完成时<b>不回补</b>——
+     *       货还在买家手上而库存已恢复，会造成超卖。</li>
+     * </ul>
+     *
+     * @param orderId      订单ID
+     * @param targetStatus 目标状态（调用方须已校验它是枚举内的合法值）
+     * @return {@code true} 实际发生了变更；{@code false} 当前状态已等于目标状态（幂等，无写入）
+     * @throws com.gjx.common.BusinessException 订单不存在 / 当前状态异常 / 迁移不被允许 / 并发冲突
+     */
+    boolean adminChangeStatus(Long orderId, OrderStatusEnum targetStatus);
 }
